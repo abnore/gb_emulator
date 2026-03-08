@@ -9,7 +9,7 @@
 #define MCLOCK 4194304      // Hz (4.194304 MHz)
 #define SCLOCK	MCLOCK>>2   // 1/4 av the master clock
 
-
+typedef uint8_t byte;
 
 /* The CPU contains registers that stores data based on op-codes */
 typedef struct{
@@ -20,21 +20,22 @@ typedef struct{
     bool IME;
     /* Registers, uses unions so I can access it as cpu.AF or cpu.A/cpu.F */
     union{
-        struct { uint8_t F; uint8_t A; }; // Low byte first, then high byte
+        struct { byte F; byte A; }; // Low byte first, then high byte
         uint16_t AF; // Accumulator & Flags
     };
     union{
-        struct { uint8_t C; uint8_t B; };
+        struct { byte C; byte B; };
         uint16_t BC;
     };
     union{
-        struct { uint8_t E; uint8_t D; };
+        struct { byte E; byte D; };
         uint16_t DE;
     };
     union{
-        struct { uint8_t L; uint8_t H; };
+        struct { byte L; byte H; };
         uint16_t HL;
     };
+
     /* These have no low or hi separation */
     uint16_t SP; // Stack Pointer
     uint16_t PC; // Program Counter/Pointer
@@ -56,7 +57,23 @@ void unset_flag(flag f, uint8_t *reg);
 int test_flag(flag f, uint8_t reg);
 
 /* The memory elements are two 8KiB registers, Work and Video RAM */
-char vram[8*1024];
-char wram[8*1024];
+byte wram[0x2000];  // $C000-$DFFF in two 4k segments
+byte hram[0xf];     // $FF80-$FFFE
+byte IE, IF;
+/*
+Memory Map
+The Game Boy has a 16-bit address bus, which is used to address ROM, RAM, and I/O.
+
+Start	End	Description	Notes
+0000	3FFF	16 KiB ROM bank 00	From cartridge, usually a fixed bank
+4000	7FFF	16 KiB ROM Bank 01–NN From cartridge, switchable bank via mapper (if any)
+A000	BFFF	8 KiB External RAM	From cartridge, switchable bank if any
+C000	CFFF	4 KiB Work RAM (WRAM)
+D000	DFFF	4 KiB Work RAM (WRAM)	In CGB mode, switchable bank 1–7
+FE00	FE9F	Object attribute memory (OAM)
+FF00	FF7F	I/O Registers
+FF80	FFFE	High RAM (HRAM)
+FFFF	FFFF	Interrupt Enable register (IE)
+*/
 
 #endif // GB_CPU_H

@@ -11,7 +11,7 @@
 
 #include "rom.h"
 
-/* Using mmap for simplicity, since i can create a simple char* to the data,
+/* Using mmap for simplicity, since i can create a simple uint8_t* to the data,
  * instead of using fseek etc, and also skipping a read to a large buffer.
  * When reading from the ROM it can be a lot of random jumps, which a memory
  * mapped I/O should be efficient at. It probably does not matter at this level.
@@ -26,16 +26,17 @@ int load_cartridge(ROM *rom, char *path){
         return(1);
     }
 
-    INFO("file: %s", rom->name);
-    rom->fd = open(rom->path, O_RDWR);
+    INFO("Opening: %s", rom->name);
+    rom->fd = open(rom->path, O_RDONLY);
+
     struct stat st;
     stat(rom->path, &st);
     rom->size = st.st_size;
-    rom->data = mmap(NULL, rom->size, PROT_READ | PROT_WRITE, MAP_SHARED, rom->fd, 0);
+    rom->data = mmap(NULL, rom->size, PROT_READ, MAP_PRIVATE, rom->fd, 0);
 
     return 0;
 }
 void remove_cartridge(ROM *r){
     munmap(r->data, r->size);
+    close(r->fd);
 }
-

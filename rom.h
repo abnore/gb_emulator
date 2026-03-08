@@ -1,11 +1,14 @@
 #ifndef ROM_H
 #define ROM_H
 
+#include <stdint.h>
+#include <sys/types.h>
+
 typedef struct _ROM {
     const char* path;
     const char* name;
     int fd;
-    char *data;
+    uint8_t *data;
     off_t size;
 }ROM;
 

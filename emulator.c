@@ -24,41 +24,83 @@ int main(int argc, char **argv)
     }
     /* --- Here we have the rom and is ready to go --- */
     ROM rom;
-    CPU cpu = {.IME=true, .AF = 0xaa00, .BC = 0xbbcc };
+    CPU cpu = {.IME=true };
 
     load_cartridge(&rom, argv[1]);
-
     INFO("Loaded cartridge! We now have access to the data");
 
-    printf("AF: 0x%.4x, in the A is 0x%.2x and F is 0x%.2x\n", cpu.AF, cpu.A, cpu.F);
-    printf("BC: 0x%.4x, in the B is 0x%.2x and C is 0x%.2x\n", cpu.BC, cpu.B, cpu.C);
-
     /* $0100—$014F */
+    // for(int i = 0x100; i < 0x15f; i+=0x10){
+    //     printf("0x%.4x  ", i);
+    //
+    //     for(int j=i; j<i+0x10; ++j){
+    //         printf("0x%.2x ",rom.data[j]);
+    //     }
+    //     printf("\n");
+    // }
 
-    for(int i = 0x100; i < 0x15f; i+=0x10){
-        printf("0x%.4x  ", i);
-
-        for(int j=i; j<i+0x10; ++j){
-            printf("0x%.2x ",(uint8_t)rom.data[j]);
-        }
-        printf("\n");
-    }
     /* So now we can read something, and extract register states. Lets see what
      * else we can do */
 
-    set_flag(Z_F, &cpu.F);
-    printf("flags: 0x%.8x\n", cpu.F);
-    set_flag(S_F, &cpu.F);
-    printf("flags: 0x%.8x\n", cpu.F);
-    printf("Is flag set: %x\n", test_flag(Z_F, cpu.F));
-    unset_flag(Z_F, &cpu.F);
-    printf("flags: 0x%.8x\n", cpu.F);
+    cpu.PC=0x0100; // Initialized at the entry point
 
-    printf("Is flag set: %x\n", test_flag(Z_F, cpu.F));
+    for (int i=0; i<60; ++i){
 
+        printf("Cpu cycles %.2i - PC: 0x%.4x ", i, cpu.PC);
+        byte opcode = rom.data[cpu.PC++];
 
-    while (cpu.IME){
-        printf("ok\n");
+        switch (opcode){
+            case 0x00: // NOP 4 cycles
+                printf("0x%x: NOP\n", opcode);
+                i+=4-1;
+                break;
+
+            case 0xc3: // JMP 8 cycles
+                printf("0x%x: JMP, TO?.. ", opcode);
+                byte lo = rom.data[cpu.PC++];
+                byte hi = rom.data[cpu.PC++];
+                uint16_t address = (hi<<8) | lo;
+                printf("0x%.4x\n", address);
+                cpu.PC = address;
+                i+=8-1;
+                break;
+
+            case 0xaf: // XOR A,A 4 cycles
+                printf("0x%x: XOR A,A ok, sure, zero out A\n", opcode);
+                cpu.A = 0;
+                i+=4-1;
+                break;
+
+            case 0x21: // LD HL 12 cycles
+                printf("0x%x LD HL, what?\n", opcode);
+                printf("Cpu cycles %.2i - PC: 0x%.4x ", i, cpu.PC);
+                cpu.L = rom.data[cpu.PC++];
+                printf("0x%.2x - low byte\n", cpu.L);
+                cpu.H = rom.data[cpu.PC++];
+                printf("Cpu cycles %.2i - PC: 0x%.4x ", i, cpu.PC);
+                printf("0x%x - 16 bit value\n", cpu.HL);
+                i+=12-1;
+                break;
+
+            case 0x0e: // LD C 8 cycles
+                printf("0x%.2x LD C, what?\n", opcode);
+                cpu.C = rom.data[cpu.PC++];
+                printf("Cpu cycles %.2i - PC: 0x%.4x ", i, cpu.PC);
+                printf("0x%.2x - value in C now\n", cpu.C);
+                i+=8-1;
+                break;
+
+            case 0x06: // LD B 8 cycles
+                printf("0x%.2x LD B, what?\n", opcode);
+                cpu.B = rom.data[cpu.PC++];
+                printf("Cpu cycles %.2i - PC: 0x%.4x ", i, cpu.PC);
+                printf("0x%.2x - value in B now\n", cpu.B);
+                i+=8-1;
+                break;
+
+            default:
+                printf("0x%.2x\n", opcode);
+        }
     }
     remove_cartridge(&rom);
     shutdown_log();

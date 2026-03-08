@@ -1,0 +1,40 @@
+$0104-$0113 Nintendo logo
+This area contains a bitmap image that is displayed
+when the Game Boy is powered on. It must match the following (hexadecimal)
+dump, otherwise the boot ROM won’t allow the game to run
+
+The bytes $0104—$011B encode the top half of the logo while the bytes
+$011C–$0133 encode the bottom half. For each half, each nibble encodes 4 pixels
+(the MSB corresponds to the leftmost pixel, the LSB to the rightmost); a pixel
+is lit if the corresponding bit is set. The 4-pixel “groups” are laid out top
+to bottom, left to right. Finally, the monochrome models upscale the entire
+thing by a factor of 2 (leading to somewhat chunky pixels). The Game Boy’s boot
+procedure first displays the logo and then checks that it matches the dump
+above. If it doesn’t, the boot ROM locks itself up.
+
+CEED 6666 CC0D 000B 0373 0083 000C 000D 0008 111F 8889 000E
+DCCC 6EE6 DDDD D999 BBBB 6763 6E0E ECCC DDDC 999F BBB9 333E
+---
+Every 2 bytes form a col, 4 nibbles on top of each other,
+top 24 bytes is top row, next bottom row;
+
+1100 0110 1100 0000 0000 0000 0000 0000 0000 0001 1000 0000
+1110 0110 1100 0000 0011 0000 0000 0000 0000 0001 1000 0000
+1110 0110 0000 0000 0111 1000 0000 0000 0000 0001 1000 0000
+1101 0110 1101 1011 0011 0011 1100 1101 1000 1111 1001 1110
+
+1101 0110 1101 1101 1011 0110 0110 1110 1101 1001 1011 0011
+1100 1110 1101 1001 1011 0111 1110 1100 1101 1001 1011 0011
+1100 1110 1101 1001 1011 0110 0000 1100 1101 1001 1011 0011
+1100 0110 1101 1001 1011 0011 1110 1100 1100 1111 1001 1110
+
+remove the spaces and 0
+
+11   11 11                             11
+111  11 11        11                   11
+111  11          1111                  11
+11 1 11 11 11 11  11  1111  11 11   11111  1111
+11 1 11 11 111 11 11 11  11 111 11 11  11 11  11
+11  111 11 11  11 11 111111 11  11 11  11 11  11
+11  111 11 11  11 11 11     11  11 11  11 11  11
+11   11 11 11  11 11  11111 11  11  11111  1111

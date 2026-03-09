@@ -3,9 +3,11 @@
  * author: Andreas Nore - github.com/abnore
  */
 #include <blackbox.h>
+#include <string.h>
 
 #include "rom.h"
 #include "cpu.h"
+
 
 int main(int argc, char **argv)
 {
@@ -29,12 +31,28 @@ int main(int argc, char **argv)
     load_cartridge(&rom, argv[1]);
     INFO("Loaded cartridge! We now have access to the data");
 
+    if (rom.data[0x0134+15] == 0){ // Should be less then 16 bytes, and 0 padded
+        INFO("Game title: %s", (char*)&rom.data[0x0134]);
+    } else {
+        INFO("Unsafe to print title");
+    }
+    uint8_t checksum = 0;
+    for (uint16_t address = 0x0134; address <= 0x014C; address++) {
+        checksum = checksum - rom.data[address] - 1;
+    }
+    INFO("checksum is 0x%.2x, computed is: 0x%.2x", rom.data[0x014d], checksum);
+    INFO("global checksum is 0x%.4x, this is not checked",
+         *(uint16_t*)&rom.data[0x014e]);
+
+    int ret = memcmp(tetris_logo_rom, &rom.data[0x104], tetris_logo_rom_len);
+    INFO("compared rom data, %i", ret);
+
     /* $0100—$014F */
     // for(int i = 0x100; i < 0x15f; i+=0x10){
     //     printf("0x%.4x  ", i);
     //
     //     for(int j=i; j<i+0x10; ++j){
-    //         printf("0x%.2x ",rom.data[j]);
+    //         printf("0x%.2x ,rom.data[j]);
     //     }
     //     printf("\n");
     // }

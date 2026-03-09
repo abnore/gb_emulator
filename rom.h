@@ -4,6 +4,9 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+extern const unsigned char tetris_logo_rom[];
+extern const int tetris_logo_rom_len;
+
 typedef struct _ROM {
     const char* path;
     const char* name;

@@ -1,4 +1,4 @@
-CFILES 	= emulator.c cpu.c rom.c
+CFILES 	= emulator.c cpu.c rom.c clock.c
 HFILES 	= $(CFILES:.c=.h)
 OFILES 	= $(CFILES:.c=.o)
 

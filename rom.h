@@ -4,18 +4,15 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+
 extern const unsigned char tetris_logo_rom[];
 extern const int tetris_logo_rom_len;
 
-typedef struct _ROM {
-    const char* path;
-    const char* name;
-    int fd;
-    uint8_t *data;
-    off_t size;
-}ROM;
+typedef uint8_t* ROM;
 
-int load_cartridge(ROM *r, char *path);
-void remove_cartridge(ROM *r);
+ROM load_cartridge(const char *path, off_t *size_out);
+void remove_cartridge(ROM r, off_t size);
+
+uint8_t read_cart(uint16_t address);
 
 #endif // ROM_H

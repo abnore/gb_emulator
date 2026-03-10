@@ -7,12 +7,12 @@
 #include <blackbox.h>
 #include <fcntl.h>
 #include <sys/stat.h>
-#include <libgen.h>
 
 #include "rom.h"
 
-/*  xxd -i -s 0x104 -l 48 ROM/Tetris.gb produces this */
-
+/* xxd -i -s 0x104 -l 48 ROM/Tetris.gb produces this, althoug i changed the
+ * names
+ */
 const unsigned char tetris_logo_rom[] = {
   0xce, 0xed, 0x66, 0x66, 0xcc, 0x0d, 0x00, 0x0b, 0x03, 0x73, 0x00, 0x83,
   0x00, 0x0c, 0x00, 0x0d, 0x00, 0x08, 0x11, 0x1f, 0x88, 0x89, 0x00, 0x0e,
@@ -26,28 +26,54 @@ const int tetris_logo_rom_len = 48;
  * instead of using fseek etc, and also skipping a read to a large buffer.
  * When reading from the ROM it can be a lot of random jumps, which a memory
  * mapped I/O should be efficient at. It probably does not matter at this level.
- * */
-int load_cartridge(ROM *rom, char *path){
-
-    rom->path = path;
-    rom->name = basename(path);
-
-    if (access(rom->path, F_OK)){
-        FATAL("%s doesn't exist", rom->name);
-        return(1);
-    }
-
-    INFO("Opening: %s", rom->name);
-    rom->fd = open(rom->path, O_RDONLY);
-
+ */
+ROM load_cartridge(const char *path, off_t *size_out)
+{
+    ROM r;
     struct stat st;
-    stat(rom->path, &st);
-    rom->size = st.st_size;
-    rom->data = mmap(NULL, rom->size, PROT_READ, MAP_PRIVATE, rom->fd, 0);
 
-    return 0;
+    int fd = open(path, O_RDONLY);
+    if (fd < 0)
+        goto err_out;
+
+    fstat(fd, &st); // We know the file exists, checks in main
+
+    r = mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (r == MAP_FAILED)
+        goto err_out;
+
+    close(fd);
+
+    if (size_out)
+        *size_out = st.st_size;
+
+    TRACE("Loaded cartridge");
+
+    if (r[0x0134+0xf] == 0){ // Should be less then 16 bytes, and 0 padded
+        INFO("Game title: %s", (char*)&r[0x0134]);
+    } else {
+        ERROR("Unsafe to print title");
+    }
+    uint8_t checksum = 0;
+    for (uint16_t address = 0x0134; address <= 0x014C; address++) {
+        checksum = checksum - r[address] - 1;
+    }
+    TRACE("checksum is 0x%.2x, computed is: 0x%.2x", r[0x014d], checksum);
+    TRACE("global checksum is 0x%.4x, this is not checked",
+         *(uint16_t*)&r[0x014e]);
+
+    int ret = memcmp(tetris_logo_rom, &r[0x104], tetris_logo_rom_len);
+    TRACE("compared rom logo with , %i", ret);
+
+    return r;
+
+err_out:
+    if (fd >= 0) close(fd);
+    return NULL;
 }
-void remove_cartridge(ROM *r){
-    munmap(r->data, r->size);
-    close(r->fd);
+
+/* So far little cleanup needed - Perhaps more later */
+void remove_cartridge(ROM r, off_t size)
+{
+    munmap(r, size);
 }

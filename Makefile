@@ -15,4 +15,4 @@ emulator: $(OFILES)
 	$(CC) -o $@ $^ $(LDFLAGS)
 
 clean:
-	rm -f emulator
+	rm -f emulator *.o

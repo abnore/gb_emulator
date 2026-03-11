@@ -5,22 +5,27 @@
 #include <stdbool.h>
 
 #include "clock.h"
+#include "rom.h"
 
-/* The cpu does the fetch - decode - execute cycle */
+/* The cpu does the fetch - decode - execute cycle
+ * We need registers, and op-code decoding and a step function */
+
 typedef uint8_t byte;
 
-/* The memory elements are two 8KiB registers, Work and Video RAM */
-byte wram[0x2000];  // $C000-$DFFF in two 4k segments
-byte hram[0xf];     // $FF80-$FFFE
-byte IE;            // $FFFF
-byte IF;            // $FF0F
-
+/* The flags register, F, contains 4 flags in bit 7-4
+ * https://gbdev.io/pandocs/CPU_Registers_and_Flags.html*/
+typedef enum{
+    Z_F = 1<<7, // Zero flag
+    N_F = 1<<6, // Subtraction flag (BCD)
+    H_F = 1<<5, // Half Carry flag (BCD)
+    C_F = 1<<4, // Carry flag
+}flag;
 
 #define ENTRY_POINT 0x100
 
 /* The CPU contains registers that stores data based on op-codes */
 typedef struct{
-    bool running;
+    bool halted;
     /* IME is a flag internal to the CPU that controls whether any interrupt
      * handlers are called, regardless of the contents of IE. IME cannot be read in
      * any way, and is modified only by ei, di and reti */
@@ -50,13 +55,16 @@ typedef struct{
 
 }CPU;
 
-/* The flags register, F, contains 4 flags in bit 7-4 */
-typedef enum{
-    Z_F = 1<<7, // Zero flag
-    S_F = 1<<6, // Subtraction flag (BCD)
-    H_F = 1<<5, // Half Carry flag (BCD)
-    C_F = 1<<4, // Carry flag
-}flag;
+
+typedef struct {
+    const char *name;
+    uint8_t cycles;
+    void (*fn)(CPU *cpu, ROM rom);
+} Op;
+
+// extern Op optable[256]; /* This might need to be exposed here */
+
+void cpu_step(CPU *cpu, ROM rom);
 
 /* TODO: Maybe a list of functions isnt the best way of implementation operations.
  * Starting thi way, optimizing later */
@@ -64,6 +72,6 @@ void set_flag(flag f, byte *reg);
 void unset_flag(flag f, byte *reg);
 int test_flag(flag f, byte reg);
 
-byte read_bus(uint16_t address);
+byte read_bus(uint16_t address, ROM rom);
 
 #endif // GB_CPU_H

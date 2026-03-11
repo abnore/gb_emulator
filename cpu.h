@@ -56,7 +56,9 @@ typedef struct{
 
 }CPU;
 
-
+/* Maybe segregate this, but getting it up and running first, and refactoring
+ * later. Once i decide on a structure, i will factor out each part
+ */
 typedef struct {
     const char *name;
     uint8_t cycles;
@@ -68,9 +70,6 @@ typedef struct {
 void cpu_step(CPU *cpu, Bus *bus);
 
 /* TODO: Maybe a list of functions isnt the best way of implementation operations.
- * Starting thi way, optimizing later */
-void set_flag(flag f, byte *reg);
-void unset_flag(flag f, byte *reg);
-int test_flag(flag f, byte reg);
+ * Starting this way, optimizing later */
 
 #endif // GB_CPU_H

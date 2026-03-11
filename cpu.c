@@ -1,37 +1,8 @@
 #include <blackbox.h>
 
 #include "cpu.h"
-#include "opcodes.h"
+#include "bus.h"
 
-/* The memory elements are two 8KiB registers, Work and Video RAM */
-byte wram[0x2000];  // $C000-$DFFF in two 4k segments
-byte hram[0x7f];     // $FF80-$FFFE
-byte IE;            // $FFFF
-byte IF;            // $FF0F
-
-/* Memory Map
-   The Game Boy has a 16-bit address bus, which is used to address ROM, RAM,
-   and I/O.
-
-   Start End Description
-   0000 3FFF 16 KiB ROM bank 00	From cartridge, usually a fixed bank
-   4000 7FFF 16 KiB ROM Bank 01–NN From cartridge, switchable bank via mapper
-   A000 BFFF 8 KiB External RAM	From cartridge, switchable bank if any
-   C000 CFFF 4 KiB Work RAM (WRAM)
-   D000 DFFF 4 KiB Work RAM (WRAM)	In CGB mode, switchable bank 1–7
-   FE00 FE9F Object attribute memory (OAM)
-   FF00 FF7F I/O Registers
-   FF80 FFFE High RAM (HRAM)
-   FFFF FFFF Interrupt Enable register (IE)
-*/
-
-/* So far just get the next byte from the ROM, this will expand to cover the
- * entire memory map later */
-byte read_bus(uint16_t address, ROM rom){
-    (void)address;
-    byte opcode = rom[address];
-    return opcode;
-}
 
 /* low 4 bits on flags register, and the flag itself, are always all 0,
  * except for when we unset on the flag (inverse)
@@ -54,51 +25,60 @@ int test_flag(flag f, uint8_t reg){
 
 /* Passing the cpu and the rom everywhere seems tedious, and unecessary
  * I need a bus struct that can be at the centre of things */
-static void op_00(CPU *cpu, ROM rom){
+static void op_00(CPU *cpu, Bus *bus){
     /* Maybe something later? cycle? */
-    (void)cpu, (void)rom;
+    (void)cpu, (void)bus->rom;
 }
-static void op_c3(CPU *cpu, ROM rom){
-    byte lo = rom[cpu->PC++];
-    byte hi = rom[cpu->PC++];
-    uint16_t address = (hi<<8) | lo;
-    cpu->PC = address;
+static void op_c3(CPU *cpu, Bus *bus){
+    byte lo = bus_read(bus, cpu->PC++);
+    byte hi = bus_read(bus, cpu->PC++);
+    cpu->PC = (hi << 8) | lo;
     DEBUG(": 0x%.4x", cpu->PC);
 }
-static void op_af(CPU *cpu, ROM rom){
+static void op_af(CPU *cpu, Bus *bus){
     cpu->A = 0;
-    (void)rom;
+    cpu->F = Z_F;
+    (void)bus;
 }
-static void op_21(CPU *cpu, ROM rom){
-    cpu->L = rom[cpu->PC++];
-    cpu->H = rom[cpu->PC++];
-    DEBUG(": 0x%.2x", cpu->HL);
+static void op_21(CPU *cpu, Bus *bus){
+    cpu->L = bus_read(bus, cpu->PC++);
+    cpu->H = bus_read(bus, cpu->PC++);
+    DEBUG(": 0x%.4x", cpu->HL);
 }
 
-static void op_0e(CPU *cpu, ROM rom){
-    cpu->C = rom[cpu->PC++];
+static void op_0e(CPU *cpu, Bus *bus){
+    cpu->C = bus_read(bus,cpu->PC++);
     DEBUG(": 0x%.2x", cpu->C);
 }
-static void op_06(CPU *cpu, ROM rom){
-    cpu->B = rom[cpu->PC++];
+static void op_06(CPU *cpu, Bus *bus){
+    cpu->B = bus_read(bus, cpu->PC++);
     DEBUG(": 0x%.2x", cpu->B);
 }
-static void op_32(CPU *cpu, ROM rom){
-    /* right now i need to manually offset this, since it's just a static
-     * array from 0x0-0x2000, i dont have it mapped yet */
-    wram[cpu->HL - 0xC000] = cpu->A;
+static void op_32(CPU *cpu, Bus *bus){
+    bus_write(bus, cpu->HL, cpu->A);
     cpu->HL--;
-    (void)rom;
+}
+
+static void op_05(CPU *cpu, Bus *bus){
+    byte old = cpu->B;
+    cpu->B--;
+    cpu->F =  (cpu->B ? 0 : Z_F)
+            | N_F
+            | ((old & 0x0F) == 0 ? H_F : 0)
+            | (cpu->F & C_F);
+
+    (void)bus;
 }
 
 Op optable[256] = {
     [0x00] = { "NOP",           4,      op_00 },
-    [0xc3] = { "JP a16",        16,     op_c3 },
-    [0xaf] = { "XOR A",         4,      op_af },
-    [0x21] = { "LD HL,d16",     12,     op_21 },
-    [0x0e] = { "LD C,n8",       8,      op_0e },
+    [0x05] = { "DEC B",         4,      op_05 },
     [0x06] = { "LD B,n8",       8,      op_06 },
+    [0x0e] = { "LD C,n8",       8,      op_0e },
+    [0x21] = { "LD HL,d16",     12,     op_21 },
     [0x32] = { "LDD [HL],A",    8,      op_32 },
+    [0xaf] = { "XOR A",         4,      op_af },
+    [0xc3] = { "JP a16",        16,     op_c3 },
 };
 
 /* Simple, dont need more at this moment */
@@ -106,16 +86,16 @@ Op optable[256] = {
 
 /* Replacing the potentially 1k+ line switch case that was 62 lines after 6
  * op-codes already */
-void cpu_step(CPU *cpu, ROM rom)
+void cpu_step(CPU *cpu, Bus *bus)
 {
-    byte opcode = read_bus(cpu->PC++, rom);
+    byte opcode = bus_read(bus, cpu->PC++);
     Op *op = &optable[opcode];
 
     if (!op->fn) {
-        WARN("0x%.2x: ? [ opcode not implemented ]\n", opcode);
+        WARN("0x%.2x: ? [ opcode not implemented ]", opcode);
         HALT();
         return;
     }
     DEBUG("op: %s  ", op->name);
-    op->fn(cpu, rom);
+    op->fn(cpu, bus);
 }

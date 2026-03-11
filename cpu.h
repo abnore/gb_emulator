@@ -6,6 +6,7 @@
 
 #include "clock.h"
 #include "rom.h"
+#include "bus.h"
 
 /* The cpu does the fetch - decode - execute cycle
  * We need registers, and op-code decoding and a step function */
@@ -59,19 +60,17 @@ typedef struct{
 typedef struct {
     const char *name;
     uint8_t cycles;
-    void (*fn)(CPU *cpu, ROM rom);
+    void (*fn)(CPU *cpu, Bus *bus);
 } Op;
 
 // extern Op optable[256]; /* This might need to be exposed here */
 
-void cpu_step(CPU *cpu, ROM rom);
+void cpu_step(CPU *cpu, Bus *bus);
 
 /* TODO: Maybe a list of functions isnt the best way of implementation operations.
  * Starting thi way, optimizing later */
 void set_flag(flag f, byte *reg);
 void unset_flag(flag f, byte *reg);
 int test_flag(flag f, byte reg);
-
-byte read_bus(uint16_t address, ROM rom);
 
 #endif // GB_CPU_H

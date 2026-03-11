@@ -8,8 +8,8 @@
 #include <libgen.h>
 
 #include "rom.h"
+#include "bus.h"
 #include "cpu.h"
-#include "opcodes.h"
 #include "clock.h"
 
 int main(int argc, char **argv)
@@ -32,16 +32,16 @@ int main(int argc, char **argv)
     init_clock();
 
     CPU cpu = { .IME = true, .PC = ENTRY_POINT, .SP = 0xdfff };
+    Bus bus;
 
-    off_t rom_size;
-    ROM rom = load_cartridge(argv[1], &rom_size);
+    bus.rom = load_cartridge(argv[1], &bus.rom_size);
 
     while ( !cpu.halted ){
-        cpu_step(&cpu, rom);
+        cpu_step(&cpu, &bus);
     }
 
     /* Starting to check opcodes and investigating running the ROM */
-    remove_cartridge(rom, rom_size);
+    remove_cartridge(bus.rom, bus.rom_size);
     shutdown_log();
     return 0;
 }

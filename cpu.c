@@ -2,7 +2,9 @@
 
 #include "cpu.h"
 #include "bus.h"
-
+#include "decoder.h"
+//#define OLD
+#ifdef OLD
 /* Passing the cpu and the rom everywhere seems tedious, and unecessary
  * I need a bus struct that can be at the centre of things */
 static void op_00(CPU *cpu, Bus *bus){
@@ -60,7 +62,9 @@ Op optable[256] = {
     [0xaf] = { "XOR A",         4,      op_af },
     [0xc3] = { "JP a16",        16,     op_c3 },
 };
+#else
 
+#endif
 /* Simple, dont need more at this moment */
 #define HALT() cpu->halted=true
 
@@ -68,7 +72,9 @@ Op optable[256] = {
  * op-codes already */
 void cpu_step(CPU *cpu, Bus *bus)
 {
+    TRACE("0x%.4x", cpu->PC);
     byte opcode = bus_read(bus, cpu->PC++);
+#ifdef OLD
     Op *op = &optable[opcode];
 
     if (!op->fn) {
@@ -78,4 +84,7 @@ void cpu_step(CPU *cpu, Bus *bus)
     }
     DEBUG("op: %s  ", op->name);
     op->fn(cpu, bus);
+#else
+    decoder(cpu, bus, opcode);
+#endif
 }

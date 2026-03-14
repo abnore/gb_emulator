@@ -36,8 +36,10 @@ int main(int argc, char **argv)
 
     bus.rom = load_cartridge(argv[1], &bus.rom_size);
 
-    while ( !cpu.halted ){
+    int safe_steps = 0;
+    while ( safe_steps < 30/*!cpu.halted*/ ){
         cpu_step(&cpu, &bus);
+        safe_steps++;
     }
 
     /* Starting to check opcodes and investigating running the ROM */

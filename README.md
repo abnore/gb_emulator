@@ -4,4 +4,10 @@ Inspired, and nerd-sniped, by the community at [gbdev.io/](https://gbdev.io/).
 This is a version with no external dependencies in pure C, using my own libraries
 for windowing, events and logging.
 
-Early goings so far, mapping out what needs to be done and testing out some ROMS.
+>[!NOTE]
+>This project is without any assistance from LLMs/AI, and is only for learning
+>purposes. Here I practice reading documentation, and regard this as a puzzle I
+>am solving.
+
+This will be a DMG (Dot Matrix Game, original GB) version, will maybe move to
+Color versions later.

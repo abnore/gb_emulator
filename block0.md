@@ -53,12 +53,12 @@ INC A        0x3c    00 111 100
 
 ### z=5 dec r8 sorted on y
 DEC B        0x05    00 000 101
-DEC D        0x15    00 010 101
-DEC H        0x25    00 100 101
-DEC [HL]     0x35    00 110 101
 DEC C        0x0d    00 001 101
+DEC D        0x15    00 010 101
 DEC E        0x1d    00 011 101
+DEC H        0x25    00 100 101
 DEC L        0x2d    00 101 101
+DEC [HL]     0x35    00 110 101
 DEC A        0x3d    00 111 101
 
 ### z=6 ld r8, n8 sorted on y

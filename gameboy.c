@@ -7,31 +7,29 @@
  */
 Gameboy gb_init(){
     return (Gameboy){
-        .cpu.IME=true,
-        .cpu.PC=ENTRY_POINT,
-        .cpu.SP=0xdffe,
-        .bus.rom = NULL,
-        .cycles = 0,
+        .cpu.IME    = true,
+        .cpu.PC     = ENTRY_POINT,
+        .cpu.SP     = 0xdffe,
+        .bus.rom    = NULL,
+        .cycles     = 0,
     };
 }
 
 /* Memory Map
-   The Game Boy has a 16-bit address bus, which is used to address ROM, RAM,
-   and I/O.
-
-   Start End Description
-   0000 3FFF 16 KiB ROM bank 00	From cartridge, usually a fixed bank
-   4000 7FFF 16 KiB ROM Bank 01–NN From cartridge, switchable bank via mapper
-   A000 BFFF 8 KiB External RAM	From cartridge, switchable bank if any
-   C000 CFFF 4 KiB Work RAM (WRAM)
-   D000 DFFF 4 KiB Work RAM (WRAM)	In CGB mode, switchable bank 1–7
-   FE00 FE9F Object attribute memory (OAM)
-   FF00 FF7F I/O Registers
-   FF80 FFFE High RAM (HRAM)
-   FFFF FFFF Interrupt Enable register (IE)
-*/
-
-/* Abstracting away the bus so that the cpu do not have to thing about
+ * The Game Boy has a 16-bit address bus, which is used to address ROM, RAM,
+ * and I/O.
+ *
+ * Start End Description
+ * 0000 3FFF 16 KiB ROM bank 00	From cartridge, usually a fixed bank
+ * 4000 7FFF 16 KiB ROM Bank 01–NN From cartridge, switchable bank via mapper
+ * A000 BFFF 8 KiB External RAM	From cartridge, switchable bank if any
+ * C000 CFFF 4 KiB Work RAM (WRAM)
+ * D000 DFFF 4 KiB Work RAM (WRAM)	In CGB mode, switchable bank 1–7
+ * FE00 FE9F Object attribute memory (OAM)
+ * FF00 FF7F I/O Registers
+ * FF80 FFFE High RAM (HRAM)
+ * FFFF FFFF Interrupt Enable register (IE)
+ * Abstracting away the bus so that the cpu do not have to thing about
  * ROM, RAM or I/0. The CPU will just write or read from an address, and
  * the this way it is memory mapped.
  *
@@ -88,7 +86,7 @@ uint8_t fetch(Gameboy *gb){
 
 /* Replacing the potentially 1k+ line switch case that was 62 lines after 6
  * op-codes already */
-uint64_t gameboy_step(Gameboy *gb)
+int gameboy_step(Gameboy *gb)
 {
     uint64_t cycles;
     /* Here we will have some clock/cycles logic to step through, I dont think

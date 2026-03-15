@@ -35,12 +35,11 @@ int main(int argc, char **argv)
     load_cartridge(argv[1], &gb);
 
     int safe_steps = 0;
-    while ( safe_steps < 100 /*!cpu.halted*/ ){
-        gb.cycles = gameboy_step(&gb);
+    while ( safe_steps >= 0 /*!gb.cpu.halted*/ ){
+        if (gameboy_step(&gb) == -1) break;
     //    next_cycle();
         safe_steps++;
     }
-
     /* Starting to check opcodes and investigating running the ROM */
     remove_cartridge(&gb);
     shutdown_log();

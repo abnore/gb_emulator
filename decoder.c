@@ -54,6 +54,8 @@
  *  ld_a_a16
  *  ld_sp_hl
  *  ld_hl_sp_e8
+ *  ldh_mem_a8_a
+ *  ldh_a_mem_a8
  *
  *  inc_r8
  *  dec_r8
@@ -71,32 +73,34 @@
  *  or_a  / imm8
  *  cp_a  / imm8
  *
- * TODO:
+ *  halt - TODO: IME flag and interrupts needs to be handled
+ *  stop
+ *  di
+ *  ei
+ *
+ *  jmp_a16
+ *  jp_hl
+ *  jr_cc_e8
+ *  jr_e8
+ *  jp_cc_a16
+ *
  *  rlca
  *  rrca
  *  rla
  *  rra
+ *
+ * TODO:
  *  daa
  *  cpl
  *  scf
  *  ccf
  *
- *  jr_e8
- *  jr_cc_e8
- *  jp_a16
- *  jp_cc_a16
- *  jp_hl
  *  call_a16
  *  call_cc_a16
  *  ret
  *  ret_cc
  *  reti
  *  rst
- *
- *  halt
- *  stop
- *  di
- *  ei
  *
  *  cb_dispatch
  *  rot_r8
@@ -156,7 +160,6 @@ int decoder(Gameboy *gb, uint8_t opcode)
 }
 
 /* Helper functions below based on the functions needed for the decoding */
-
 /* Reading the byte the PC is pointing at as an immediate, and moving PC */
 uint8_t read_imm8(Gameboy *gb){
     return bus_read(gb, gb->cpu.PC++);
@@ -168,7 +171,7 @@ uint16_t read_imm16(Gameboy *gb){
     return ((uint16_t)hi << 8) | lo;
 }
 /* Read from a 8bit register based on index: B,C,D,E,H,L,[HL],A,
- * notigce [HL] is the byte at the address in HL */
+ * notice [HL] is the byte at the address in HL */
 uint8_t read_r8(Gameboy *gb, r8_e idx){
     switch (idx) {
     case R8_B:  return gb->cpu.B;
@@ -285,21 +288,22 @@ void ld_r8_r8(Gameboy *gb, r8_e dst, r8_e src){
     write_r8(gb, dst, read_r8(gb, src));
 }
 void ld_r8_imm8(Gameboy *gb, r8_e dst){
-    write_r8(gb, dst, read_imm8(gb));
+    uint8_t val = read_imm8(gb);
+    printf("0x%x - dst:%d ", val, dst);
+    write_r8(gb, dst,val);
 }
 void ld_r16_imm16(Gameboy *gb, r16_e dst){
-    write_r16(gb, dst, read_imm16(gb));
-}
-void ld_mem_hl_imm8(Gameboy *gb){
-    write_r8(gb, R8_HL, read_imm8(gb));
+    uint16_t val = read_imm16(gb);
+    printf("0x%x dst:%d- ",val, dst);
+    write_r16(gb, dst,val);
 }
 
-/* Uses [BC], [DE] and [HL+] [HL-] */
+/* Uses [BC], [DE] and [HL+] [HL-] both ways, to and from A*/
 void ld_mem_r16_a(Gameboy *gb, r16mem_e dst){
+    printf("ld_mem_r16: A into %d - 0x%x\n",dst, addr_r16(gb, dst));
     bus_write(gb, addr_r16(gb, dst), gb->cpu.A);
     step_r16(gb, dst);
 }
-
 void ld_a_mem_r16(Gameboy *gb, r16mem_e src){
     write_r8(gb, R8_A, bus_read(gb, addr_r16(gb, src)));
     step_r16(gb, src);
@@ -314,25 +318,21 @@ void ld_a16_sp(Gameboy *gb){
     bus_write(gb, addr,     (uint8_t)gb->cpu.SP);
     bus_write(gb, addr + 1, (uint8_t)(gb->cpu.SP >> 8));
 }
-
 /* This does the same, only now from A, we store only 1 byte
  * LD [a16], A */
 void ld_a16_a(Gameboy *gb){
     uint16_t addr = read_imm16(gb);
     bus_write(gb, addr, gb->cpu.A);
 }
-
 /* LD A, [a16] */
 void ld_a_a16(Gameboy *gb){
     uint16_t addr = read_imm16(gb);
     write_r8(gb, R8_A, bus_read(gb, addr));
 }
-
 /* LD SP, HL and the special LD HL, SP+e8 form */
 void ld_sp_hl(Gameboy *gb){
     write_r16(gb, R16_SP, read_r16(gb, R16_HL));
 }
-
 /* Add the signed value e8 to SP and copy the result in HL.
  * flags:
  * Z 0
@@ -351,6 +351,29 @@ void ld_hl_sp_e8(Gameboy *gb){
     write_r16(gb, R16_HL, result);
 }
 
+void ldh_mem_a8_a(Gameboy *gb){
+    uint16_t addr = 0xFF00 + read_imm8(gb);
+    bus_write(gb, addr, gb->cpu.A);
+}
+
+void ldh_a_mem_a8(Gameboy *gb){
+    uint8_t a8 = read_imm8(gb);
+    uint16_t addr = 0xFF00 + a8;
+    uint8_t value = bus_read(gb, addr);
+
+    printf("LDH A,[%02x] addr=%04x value=%02x\n", a8, addr, value);
+
+    write_r8(gb, R8_A, value);
+}
+void ldh_c_a(Gameboy *gb){
+    uint16_t addr = 0xFF00 + gb->cpu.C;
+    bus_write(gb, addr, gb->cpu.A);
+}
+
+void ldh_a_c(Gameboy *gb){
+    uint16_t addr = 0xFF00 + gb->cpu.C;
+    write_r8(gb, R8_A, bus_read(gb, addr));
+}
 /* Increments and decrements r8 and r16 register, also sets flags
  * Z Set if result is 0.
  * N 0
@@ -365,7 +388,6 @@ void inc_r8(Gameboy *gb, r8_e idx){
 
     write_r8(gb, idx, value);
 }
-
 /* Z Set if result is 0.
  * N 1
  * H Set if borrow from bit 4.*/
@@ -378,6 +400,7 @@ void dec_r8(Gameboy *gb, r8_e idx){
     if (value == 0)             gb->cpu.F |= Z_F;
     if ((old & 0x0F) == 0x00)   gb->cpu.F |= H_F;
 
+    printf("dec r8 idx:%d value:%d\n", idx, value);
     write_r8(gb, idx, value);
 }
 /* Increments and decrements a 16bit register, but flags are untouched */
@@ -387,7 +410,6 @@ void inc_r16(Gameboy *gb, r16_e idx){
 void dec_r16(Gameboy *gb, r16_e idx){
     write_r16(gb, idx, read_r16(gb, idx) - 1);
 }
-
 /* special add operation
  * Add the value in r16 to HL.
  * N 0
@@ -407,7 +429,6 @@ void add_hl_r16(Gameboy *gb, r16_e idx){
 
     write_r16(gb, R16_HL, (uint16_t)result);
 }
-
 /* Add the signed value e8 to SP
  * Z 0
  * N 0
@@ -476,20 +497,6 @@ void sub_a_imm8(Gameboy *gb){
 void sbc_a_imm8(Gameboy *gb){
     sub_a_val(gb, read_imm8(gb), true);
 }
-/* --- Normal ALU operations here --- */
-void add_a(Gameboy *gb, r8_e idx){
-    add_a_val(gb, read_r8(gb, idx), false);
-}
-void adc_a(Gameboy *gb, r8_e idx){
-    add_a_val(gb, read_r8(gb, idx), true);
-}
-void sub_a(Gameboy *gb, r8_e idx){
-    sub_a_val(gb, read_r8(gb, idx), false);
-}
-void sbc_a(Gameboy *gb, r8_e idx){
-    sub_a_val(gb, read_r8(gb, idx), true);
-}
-
 /* Set A to the bitwise AND between the value in r8 and A.
  * Z Set if result is 0.
  * N 0
@@ -503,12 +510,6 @@ static void and_a_val(Gameboy *gb, uint8_t value){
     if (res == 0) gb->cpu.F |= Z_F;
 
     write_r8(gb, R8_A, res);
-}
-void and_a(Gameboy *gb, r8_e idx){
-    and_a_val(gb, read_r8(gb, idx));
-}
-void and_a_imm8(Gameboy *gb){
-    and_a_val(gb, read_imm8(gb));
 }
 /* Set A to the bitwise XOR between the value in r8 and A.
  * Z Set if result is 0.
@@ -524,12 +525,6 @@ static void xor_a_val(Gameboy *gb, uint8_t value){
 
     write_r8(gb, R8_A, res);
 }
-void xor_a(Gameboy *gb, r8_e idx){
-    xor_a_val(gb, read_r8(gb, idx));
-}
-void xor_a_imm8(Gameboy *gb){
-    xor_a_val(gb, read_imm8(gb));
-}
 /* Set A to the bitwise OR between the value in r8 and A.
  * Z Set if result is 0.
  * N 0
@@ -543,6 +538,31 @@ static void or_a_val(Gameboy *gb, uint8_t value){
     if (res == 0) gb->cpu.F |= Z_F;
 
     write_r8(gb, R8_A, res);
+}
+/* --- Normal ALU operations here --- */
+void add_a(Gameboy *gb, r8_e idx){
+    add_a_val(gb, read_r8(gb, idx), false);
+}
+void adc_a(Gameboy *gb, r8_e idx){
+    add_a_val(gb, read_r8(gb, idx), true);
+}
+void sub_a(Gameboy *gb, r8_e idx){
+    sub_a_val(gb, read_r8(gb, idx), false);
+}
+void sbc_a(Gameboy *gb, r8_e idx){
+    sub_a_val(gb, read_r8(gb, idx), true);
+}
+void and_a(Gameboy *gb, r8_e idx){
+    and_a_val(gb, read_r8(gb, idx));
+}
+void and_a_imm8(Gameboy *gb){
+    and_a_val(gb, read_imm8(gb));
+}
+void xor_a(Gameboy *gb, r8_e idx){
+    xor_a_val(gb, read_r8(gb, idx));
+}
+void xor_a_imm8(Gameboy *gb){
+    xor_a_val(gb, read_imm8(gb));
 }
 void or_a(Gameboy *gb, r8_e idx){
     or_a_val(gb, read_r8(gb, idx));
@@ -564,6 +584,8 @@ static void cp_a_val(Gameboy *gb, uint8_t value){
     if (res == 0) gb->cpu.F |= Z_F;
     if ((a & 0x0F) < (value & 0x0F)) gb->cpu.F |= H_F;
     if (a < value) gb->cpu.F |= C_F;
+
+    printf("CP A=%02x value=%02x res=%02x F=%02x\n", a, value, res, gb->cpu.F);
 }
 void cp_a(Gameboy *gb, r8_e idx){
     cp_a_val(gb, read_r8(gb, idx));
@@ -574,60 +596,176 @@ void cp_a_imm8(Gameboy *gb){
 
 /* ---- */
 
+void nop(void){ /* Silly function to implement */ }
+void stop(Gameboy *gb) { (void)read_imm8(gb); } // But ignores the result
+/*
+Enter CPU low-power consumption mode until an interrupt occurs.
+
+The exact behavior of this instruction depends on the state of the IME flag,
+and whether interrupts are pending (i.e. whether ‘[IE] & [IF]’ is non-zero):
+
+If the IME flag is set: The CPU enters low-power mode until after an interrupt
+is about to be serviced. The handler is executed normally, and the CPU resumes
+execution after the HALT when that returns. If the IME flag is not set, and no
+interrupts are pending: As soon as an interrupt becomes pending, the CPU
+resumes execution. This is like the above, except that the handler is not
+called. If the IME flag is not set, and some interrupt is pending: The CPU
+continues execution after the HALT, but the byte after it is read twice in a
+row (PC is not incremented, due to a hardware bug).
+*/
+void halt(Gameboy *gb) { gb->cpu.halted=true; }
+/* DI
+ * Disable Interrupts by clearing the IME flag.
+ */
+void di(Gameboy *gb){
+    gb->cpu.IME = false;
+    gb->cpu.ime_enable_pending = false;
+}
+/* EI
+ * Enable Interrupts by setting the IME flag.
+ * The flag is only set after the instruction following EI. */
+void ei(Gameboy *gb) { gb->cpu.ime_enable_pending = true; }
 
 /* Jumping to a absolute n16 address */
-void jmp_n16(Gameboy *gb ) {
+void jmp_a16(Gameboy *gb ) {
     gb->cpu.PC = read_imm16(gb);
 }
+/* Jumping to absolute n16 address if cc is true */
+bool jp_cc_a16(Gameboy *gb, cc_e cc){
+    bool cc_b = cc_true(gb, cc);
+    uint16_t address = read_imm16(gb); // Have to consume the byte even if false
 
+    if (cc_b)
+        gb->cpu.PC = address;
+
+    return cc_b;
+}
+/* The address jp to is the address following the opcode plus an 8bit offset */
+void jr_e8(Gameboy *gb){
+    int8_t rel_address = (int8_t)read_imm8(gb);
+    gb->cpu.PC += rel_address;
+}
+/* Same as above, but only on condition cc*/
+bool jr_cc_e8(Gameboy *gb, cc_e cc){
+    int8_t rel_address = (int8_t)read_imm8(gb);
+    bool cc_b = cc_true(gb, cc);
+
+    if (cc_b)
+        gb->cpu.PC += rel_address;
+
+    printf("JR cc=%d rel=%d F=%02x taken=%d\n", cc, rel_address, gb->cpu.F, cc_b);
+
+    return cc_b;
+}
+/*Jump to address in HL; effectively, copy the value in register HL into PC.*/
+void jp_hl(Gameboy *gb){
+    gb->cpu.PC = read_r16(gb, R16_HL);
+}
+
+/* Last helpers for block_0, rotate operations*/
+/* rotate register A left, setting C_F accordingly, other flags 0 */
+void rlca(Gameboy *gb){
+    uint8_t r8_a = read_r8(gb, R8_A);
+    uint8_t c_bit = (r8_a & 0x80) >> 7;
+
+    r8_a <<= 1;
+    r8_a |= c_bit;
+    gb->cpu.F = c_bit ? C_F : 0;
+
+    write_r8(gb, R8_A, r8_a);
+}
+/* rotate register a right, flags accordingly */
+void rrca(Gameboy *gb){
+    uint8_t r8_a = read_r8(gb, R8_A);
+    uint8_t c_bit = r8_a & 1;
+
+    r8_a >>= 1;
+    r8_a |= (c_bit << 7);
+    gb->cpu.F = c_bit ? C_F : 0;
+
+    write_r8(gb, R8_A, r8_a);
+}
+/* rotates A left through the carry flag, so if top bit is high, and C flag was
+ * 0, C flag is now one, and a 0 comes in */
+void rla(Gameboy *gb){
+    uint8_t r8_a = read_r8(gb, R8_A);
+    uint8_t c_bit = (r8_a & 0x80) >> 7;
+
+    r8_a <<= 1;
+    r8_a |= (gb->cpu.F & C_F) ? 1 : 0 ;
+    gb->cpu.F = c_bit ? C_F : 0;
+
+    write_r8(gb, R8_A, r8_a);
+}
+/* Rotate register A right, through the carry flag. */
+void rra(Gameboy *gb){
+    uint8_t r8_a = read_r8(gb, R8_A);
+    uint8_t c_bit = r8_a & 1;
+
+    r8_a >>= 1;
+    r8_a |= (gb->cpu.F & C_F) ? 0x80 : 0;
+    gb->cpu.F = c_bit ? C_F : 0;
+
+    write_r8(gb, R8_A, r8_a);
+}
+void daa(Gameboy *gb){}
+void cpl(Gameboy *gb){}
+void scf(Gameboy *gb){}
+void ccf(Gameboy *gb){}
+
+
+// ================ MAIN DECODERS =====================
+/* this block is kind of messy */
 int decode_block0(Gameboy *gb, uint8_t opcode)
 {
-    int cycles=0;
     uint8_t y = (opcode >> 3) & 7;
     uint8_t z = opcode & 7;
-    //uint8_t p = y >> 1; Maybe this isnt used for anything
+    uint8_t p = y >> 1;
     uint8_t q = y & 1;
-    switch (z) {
-        case 0: // z=0 specials
-            switch (y) {
-            case 0: printf("NOP\n"); cycles = 4;                        break;
-            case 1: printf("LD [a16], SP\n"); cycles=20;                break;
-            case 2: printf("STOP\n"); gb->cpu.PC++; gb->cpu.halted=true;  break;
-            case 3: printf("JR e8\n");         break;
-            case 4: printf("JR NZ, e8\n");     break;
-            case 5: printf("JR Z, e8\n");      break;
-            case 6: printf("JR NC, e8\n");     break;
-            case 7: printf("JR C, e8\n");      break;
-            }
-            break;
-        case 1: // z=1 load/add n16 based on q and p
-            switch (q) {
-            case 0: printf("LD n16 based on p and q\n");  break;
-            case 1: printf("ADD r16 to HL\n"); break;
-            }
-            break;
-        case 2: // z=2 load to/from A based on q and p
-            switch (q) {
-            case 0: printf("LD from A to address of r16\n");     break;
-            case 1: printf("LD to A from address of r16\n");     break;
-            }break;
-        case 3: // z=3 inc or dec r16 based on q and p
-            switch (q) {
-            case 0: printf("INC r16\n");       break;
-            case 1: printf("DEC r16\n");       break;
-            }break;
-        case 4: // z=4 inc r8 based on y
-            printf("INC r8\n");                break;
-        case 5: // z=5 dec r8 based on y
-            printf("DEC r8\n");                break;
-        case 6: // z=6 LD n8 into r8 based on y
-            printf("LD something n8\n");
-            gb->cpu.PC++; break;
-        case 7: // rotate flag based on y
-            printf("Rotate + div...\n");                break;
-    };
 
-    return cycles;
+    switch (z) {
+    case 0:
+        switch (y) {
+        case 0: printf("nop\n");                    nop();       return 4;
+        case 1: printf("ld [a16], sp\n");   ld_a16_sp(gb);       return 20;
+        case 2: printf("stop\n");                stop(gb);       return 4;
+        case 3: printf("jr e8\n");              jr_e8(gb);       return 12;
+        case 4: printf("jr NZ e8\n"); return jr_cc_e8(gb, CC_NZ) ? 12 : 8;
+        case 5: printf("jr Z, e8\n"); return jr_cc_e8(gb, CC_Z)  ? 12 : 8;
+        case 6: printf("jr NC, e8\n");return jr_cc_e8(gb, CC_NC) ? 12 : 8;
+        case 7: printf("jr C, e8\n"); return jr_cc_e8(gb, CC_C)  ? 12 : 8;
+        } break;
+    case 1:
+        switch (q) {
+        case 0: ld_r16_imm16(gb, p); printf("ld n16\n");        return 12;
+        case 1: add_hl_r16(gb, p); printf("add r16 to HL\n");   return 8;
+        } break;
+    case 2:
+        switch (q) {
+        case 0: ld_mem_r16_a(gb, p); return 8;
+        case 1: ld_a_mem_r16(gb, p); return 8;
+        } break;
+    case 3:
+        switch (q) {
+        case 0: inc_r16(gb, p); printf("INC r16\n");       return 8;
+        case 1: dec_r16(gb, p); printf("DEC r16\n");       return 8;
+        }break;
+    case 4: inc_r8(gb, y); printf("inc r8\n"); return (y==R8_HL)?12:4;
+    case 5: dec_r8(gb, y);                     return (y==R8_HL)?12:4;
+    case 6: ld_r8_imm8(gb, y); printf("ld r8 imm8\n");return (y==R8_HL)?12:8;
+    case 7:
+        switch (y){
+        case 0: rlca(gb); return 4;
+        case 1: rrca(gb); return 4;
+        case 2: rla(gb); return 4;
+        case 3: rra(gb); return 4;
+        case 4:;
+        case 5:;
+        case 6:;
+        case 7:;
+        }printf("[ 0x%.2x ] ! opcode not implemented\n", opcode); return -1;
+    }
+    return 0;
 }
 
 /* With the helpers and logic broken out, this function become really nice!
@@ -647,23 +785,22 @@ int decode_block1(Gameboy *gb, uint8_t opcode)
     printf("Decode Block 1\n");
     return (dst == R8_HL || src == R8_HL) ? 8 : 4;
 }
-
+/* Same with block 2, we switch on op and src only */
 int decode_block2(Gameboy *gb, uint8_t opcode)
 {
     uint8_t op  = (opcode >> 3) & 7;  // which operation
     r8_e src = opcode & 7;            // which register
 
     switch (op) {
-        case 0:  add_a(gb, src); break;
-        case 1:  adc_a(gb, src); break;
-        case 2:  sub_a(gb, src); break;
-        case 3:  sbc_a(gb, src); break;
-        case 4:  and_a(gb, src); break;
-        case 5:  xor_a(gb, src); break;
-        case 6:  or_a (gb, src); break;
-        case 7:  cp_a (gb, src); break;
+    case 0: printf("add src=%u\n", src); add_a(gb, src); break;
+    case 1: printf("adc src=%u\n", src); adc_a(gb, src); break;
+    case 2: printf("sub src=%u\n", src); sub_a(gb, src); break;
+    case 3: printf("sbc src=%u\n", src); sbc_a(gb, src); break;
+    case 4: printf("and src=%u\n", src); and_a(gb, src); break;
+    case 5: printf("xor src=%u\n", src); xor_a(gb, src); break;
+    case 6: printf("or src=%u\n", src);  or_a (gb, src); break;
+    case 7: printf("cp src=%u\n", src);  cp_a (gb, src); break;
     }
-    printf("Decode Block 2\n");
     return (src == R8_HL) ? 8 : 4;
 }
 
@@ -673,9 +810,10 @@ int decode_block2(Gameboy *gb, uint8_t opcode)
  */
 int decode_block3(Gameboy *gb, uint8_t opcode)
 {
-    int cycles=0;
     uint8_t z = opcode & 7;
     uint8_t y = (opcode >> 3) & 7;
+    uint8_t q = y & 1;
+    uint8_t p = (y >> 1);
 
     switch (z) {
         case 0:
@@ -684,43 +822,43 @@ int decode_block3(Gameboy *gb, uint8_t opcode)
             case 1: break;
             case 2: break;
             case 3: break;
-            case 4: break;
-            case 5: break;
-            case 6: break;
-            case 7: break;
+            case 4: printf("ldh [a8], A\n"); ldh_mem_a8_a(gb); return 12;
+            case 5: printf("add sp, e8\n"); add_sp_e8(gb); return 16;
+            case 6: printf("ldh A, [a8]\n"); ldh_a_mem_a8(gb); return 12;
+            case 7: printf("ld hl, sp+e8\n"); ld_hl_sp_e8(gb); return 12;
             }break;
         case 1:
-            switch (y){
-            case 0: break;
-            case 1: break;
-            case 2: break;
-            case 3: break;
-            case 4: break;
-            case 5: break;
-            case 6: break;
-            case 7: break;
-            }break;
+            if (!q){
+                printf("pop r16:%d\n",p); write_r16stk(gb, p, pop16(gb)); return 12;
+            } else {
+                switch (p){
+                case 0: break;
+                case 1: break;
+                case 2: break;
+                case 3: break;
+                }
+            } break;
         case 2:
             switch (y){
-            case 0: break;
-            case 1: break;
-            case 2: break;
-            case 3: break;
-            case 4: break;
-            case 5: break;
-            case 6: break;
-            case 7: break;
+            case 0:
+            case 1:
+            case 2:
+            case 3: printf("jp cc a16\n"); return jp_cc_a16(gb,(cc_e)y) ? 16:12;
+            case 4: printf("ldh [C], A"); ldh_c_a(gb); return 8;
+            case 5: printf("ld [a16], A\n"); ld_a16_a(gb); return 16;
+            case 6: printf("ldh A, [C]\n"); ldh_a_c(gb); return 8;
+            case 7: printf("ld a, [a16]\n"); ld_a_a16(gb); return 16;
             }break;
         case 3:
             switch (y){
-            case 0: printf("JP to n16\n"); jmp_n16(gb); return 0;
-            case 1: printf("PREFIX\n"); return 0;
-            case 2:;
-            case 3:;
-            case 4:;
-            case 5:for(;;); // HARDLOCK
-            case 6: printf("DI\n"); return 0;
-            case 7: printf("EI\n"); return 0;
+            case 0: printf("jp to n16\n"); jmp_a16(gb); return 16;
+            case 1: printf("[TODO] PREFIX\n"); return 0;
+            case 2:
+            case 3:
+            case 4:
+            case 5: for(;;); // HARDLOCK
+            case 6: di(gb); printf("di\n"); return 4;
+            case 7: ei(gb); printf("ei\n"); return 4;
             } break;
         case 4:
             switch (y){
@@ -728,32 +866,32 @@ int decode_block3(Gameboy *gb, uint8_t opcode)
             case 1: break;
             case 2: break;
             case 3: break;
-            case 4: break;
-            case 5: break;
-            case 6: break;
-            case 7: break;
+            case 4:
+            case 5:
+            case 6:
+            case 7: printf("HARDLOCK\n");for(;;); // HARDLOCK
             }break;
         case 5:
-            switch (y){
-            case 0: break;
-            case 1: break;
-            case 2: break;
-            case 3: break;
-            case 4: break;
-            case 5: break;
-            case 6: break;
-            case 7: break;
-            }break;
+            if (!q){
+                printf("push r16:%d\n",p); push16(gb, read_r16stk(gb, p)); return 16;
+            } else {
+                switch (p){
+                case 0: break;
+                case 1: break;
+                case 2: break;
+                case 3: break;
+                }
+            } break;
         case 6:
             switch (y){
-            case 0: break;
-            case 1: break;
-            case 2: break;
-            case 3: break;
-            case 4: break;
-            case 5: break;
-            case 6: break;
-            case 7: break;
+            case 0: printf("add imm8 a\n"), add_a_imm8(gb); return 8;
+            case 1: printf("adc imm8 a\n"), adc_a_imm8(gb); return 8;
+            case 2: printf("sub imm8 a\n"), sub_a_imm8(gb); return 8;
+            case 3: printf("sbc imm8 a\n"), sbc_a_imm8(gb); return 8;
+            case 4: printf("and imm8 a\n"), and_a_imm8(gb); return 8;
+            case 5: printf("xor imm8 a\n"), xor_a_imm8(gb); return 8;
+            case 6: printf("or imm8 a\n"), or_a_imm8(gb); return 8;
+            case 7: printf("cp imm8 a\n"), cp_a_imm8(gb); return 8;
             }break;
         case 7:
             switch (y){
@@ -768,6 +906,5 @@ int decode_block3(Gameboy *gb, uint8_t opcode)
             }break;
     }
 
-    printf("[ 0x%.2x ] ! opcode not implemented\n", opcode);
-    return cycles;
+    printf("3 [ 0x%.2x ] ! opcode not implemented\n", opcode); return -1;
 }

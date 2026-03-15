@@ -54,6 +54,9 @@ uint8_t bus_read(Gameboy *gb, uint16_t addr)
     if (addr == 0xFFFF)
         return bus->i_enable;
 
+    if (addr == 0xFF44)
+        return 0x94;
+
     return 0xFF;
 }
 
@@ -92,9 +95,13 @@ int gameboy_step(Gameboy *gb)
     /* Here we will have some clock/cycles logic to step through, I dont think
      * i have to worry about that before i start with the graphics */
     printf("0x%.4x - ", gb->cpu.PC);
+    bool enable_ime_after = gb->cpu.ime_enable_pending;
     uint8_t opcode = fetch(gb);
+    printf("0x%.2x - ", opcode);
     cycles = decoder(gb, opcode);
-    //printf("cycles: %llu\n", cycles);
-
+    if (enable_ime_after) {
+        gb->cpu.IME = true;
+        gb->cpu.ime_enable_pending = false;
+    }
     return cycles;
 }

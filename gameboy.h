@@ -10,9 +10,12 @@ typedef struct CPU
 {
     bool halted;
     /* IME is a flag internal to the CPU that controls whether any interrupt
-     * handlers are called, regardless of the contents of IE. IME cannot be read in
-     * any way, and is modified only by ei, di and reti */
+     * handlers are called, regardless of the contents of IE. IME cannot be
+     * read in any way, and is modified only by ei, di and reti */
     bool IME;
+    /* di enables right away, but ei sets it after the next operation.
+     * So I need to flag it for *after* the next op! */
+    bool ime_enable_pending;
 
     /* Registers, uses unions so I can access it as cpu.AF or cpu.A/cpu.F */
     union{

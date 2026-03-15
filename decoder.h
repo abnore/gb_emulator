@@ -102,11 +102,10 @@ void push16(Gameboy *gb, uint16_t value) ;
 uint16_t pop16(Gameboy *gb) ;
 bool cc_true(Gameboy *gb, cc_e cc);
 /* LD using normal r8 and r16 operands and imm.
- * The first one is all block 1 needs to work, the 3 under as block 0 helpers */
+ * The first one is all block 1 needs to work, the 2 under as block 0 helpers */
 void ld_r8_r8(Gameboy *gb, r8_e dst, r8_e src);
 void ld_r8_imm8(Gameboy *gb, r8_e dst);
 void ld_r16_imm16(Gameboy *gb, r16_e dst);
-void ld_mem_hl_imm8(Gameboy *gb);
 /* Uses [BC], [DE] and [HL+] [HL-] */
 void ld_mem_r16_a(Gameboy *gb, r16mem_e dst);
 void ld_a_mem_r16(Gameboy *gb, r16mem_e src);
@@ -126,6 +125,10 @@ void ld_sp_hl(Gameboy *gb);
  * sets flags: Z and N is set to 0, and H Set if overflow from bit 3. C Set if
  * overflow from bit 7. */
 void ld_hl_sp_e8(Gameboy *gb);
+void ldh_mem_a8_a(Gameboy *gb);
+void ldh_a_mem_a8(Gameboy *gb);
+void ldh_c_a(Gameboy *gb);
+void ldh_a_c(Gameboy *gb);
 /* Increments and decrements r8 and r16 register, also sets flags
  * Z Set if result is 0.
  * N 0
@@ -166,6 +169,20 @@ void or_a (Gameboy *gb, r8_e idx);
 void cp_a (Gameboy *gb, r8_e idx);
 
 /* Jumping to a absolute n16 address */
-void jmp_n16(Gameboy *gb);
+void jmp_a16(Gameboy *gb);
+void jp_hl(Gameboy *gb);
+bool jr_cc_e8(Gameboy *gb, cc_e cc);
+void jr_e8(Gameboy *gb);
+bool jp_cc_a16(Gameboy *gb, cc_e cc);
+
+/* Rotate and misc bit shift instructions */
+void rlca(Gameboy *gb);
+void rrca(Gameboy *gb);
+void rla(Gameboy *gb);
+void rra(Gameboy *gb);
+void daa(Gameboy *gb);
+void cpl(Gameboy *gb);
+void scf(Gameboy *gb);
+void ccf(Gameboy *gb);
 
 #endif //DECODER_H

@@ -15,14 +15,14 @@ ADD SP, e8    0xE8    11 101 000
 LDH A, [a8]   0xF0    11 110 000
 LD HL, SP+e8  0xF8    11 111 000
 
-### z=1 pop / ret / jp hl / ld sp,hl, sorted after y
+### z=1 pop / ret / jp hl / ld sp,hl, sorted after p and q
 POP BC        0xC1    11 000 001
-RET           0xC9    11 001 001
 POP DE        0xD1    11 010 001
-RETI          0xD9    11 011 001
 POP HL        0xE1    11 100 001
-JP HL         0xE9    11 101 001
 POP AF        0xF1    11 110 001
+RET           0xC9    11 001 001
+RETI          0xD9    11 011 001
+JP HL         0xE9    11 101 001
 LD SP, HL     0xF9    11 111 001
 
 ### z=2 jp cond / ldh / a16 loads, sorted after y
@@ -55,14 +55,14 @@ CALL C, a16   0xDC    11 011 100
 —             0xF4    11 110 100  HARDLOCK
 —             0xFC    11 111 100  HARDLOCK
 
-### z=5 push / call, sorted after y
+### z=5 push / call, divided by q and p
 PUSH BC       0xC5    11 000 101
-CALL a16      0xCD    11 001 101
 PUSH DE       0xD5    11 010 101
-—             0xDD    11 011 101  HARDLOCK
 PUSH HL       0xE5    11 100 101
-—             0xED    11 101 101  HARDLOCK
 PUSH AF       0xF5    11 110 101
+CALL a16      0xCD    11 001 101
+—             0xDD    11 011 101  HARDLOCK
+—             0xED    11 101 101  HARDLOCK
 —             0xFD    11 111 101  HARDLOCK
 
 ### z=6 alu A, n8 sorted after y

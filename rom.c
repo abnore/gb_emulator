@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 
 #include "rom.h"
+#include "gameboy.h"
 
 /* xxd -i -s 0x104 -l 48 ROM/Tetris.gb produces this, althoug i changed the
  * names
@@ -27,9 +28,10 @@ const int tetris_logo_rom_len = 48;
  * When reading from the ROM it can be a lot of random jumps, which a memory
  * mapped I/O should be efficient at. It probably does not matter at this level.
  */
-ROM load_cartridge(const char *path, off_t *size_out)
+void load_cartridge(const char *path, void *gb)
 {
-    ROM r;
+    Gameboy *g = gb;
+    uint8_t *r;
     struct stat st;
 
     int fd = open(path, O_RDONLY);
@@ -44,8 +46,7 @@ ROM load_cartridge(const char *path, off_t *size_out)
 
     close(fd);
 
-    if (size_out)
-        *size_out = st.st_size;
+    g->bus.rom_size = st.st_size;
 
     TRACE("Loaded cartridge");
 
@@ -65,15 +66,16 @@ ROM load_cartridge(const char *path, off_t *size_out)
     int ret = memcmp(tetris_logo_rom, &r[0x104], tetris_logo_rom_len);
     TRACE("compared rom logo with , %i", ret);
 
-    return r;
+    g->bus.rom = r;
+    return;
 
 err_out:
     if (fd >= 0) close(fd);
-    return NULL;
 }
 
 /* So far little cleanup needed - Perhaps more later */
-void remove_cartridge(ROM r, off_t size)
+void remove_cartridge(void *gb)
 {
-    munmap(r, size);
+    Gameboy *g = gb;
+    munmap(g->bus.rom, g->bus.rom_size);
 }

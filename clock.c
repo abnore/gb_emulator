@@ -1,7 +1,3 @@
-#include <blackbox.h>
-#include "clock.h"
-
-
 /*
 kern_return_t is literally just an int
 
@@ -22,36 +18,32 @@ uint64_t dt = t1 - t0;
 Then elapsed nanoseconds is dt * 125/3
 To get seconds ( which i dont plan on ) i need to take that and  / 1e9
 */
+#include <blackbox.h>
+#include "clock.h"
+
 static mach_timebase_info_data_t timebase;
 static uint64_t start_time;
 
 void init_clock(void){
     kern_return_t result = mach_timebase_info(&timebase);
-    if (result != KERN_SUCCESS) printf("OWO\n");
+    if (result != KERN_SUCCESS) printf("i dunno... crash i guess\n");
     INFO("clock init");
 
     start_time = mach_absolute_time();
-    printf("denom: %i - numer %i\n", timebase.denom, timebase.numer);
+    //printf("denom: %i - numer %i\n", timebase.denom, timebase.numer);
 }
 
-/* This does not work -
- * 17:47:30 [TRACE] clock.c:next_cycle():42 => elapsed ns: 15583
- * A simple print takes more time then the ~240ns i want. I need to think of a
- * different solution
- */
+/* We timestamp the start, then after a while we timestamp*/
 int next_cycle(){
 
     uint64_t t1 = mach_absolute_time();
 
-    uint64_t ens = (t1-start_time) * timebase.numer / timebase.denom;
-    TRACE("elapsed ns: %llu", ens);
+    uint64_t elapsed_ns = (t1-start_time) * timebase.numer / timebase.denom;
+    printf("[clock] elapsed ns: %llu\n", elapsed_ns);
 
-    if (ens > 240){
-        start_time = t1;
-        return 1;
-    }
+    start_time = t1;
 
+    uint64_t cycles_owed = elapsed_ns / 240;
+    printf("[clock] cycles owed is: %llu\n", cycles_owed);
     return 0;
 }
-
-

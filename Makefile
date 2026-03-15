@@ -1,8 +1,8 @@
-CFILES 	= emulator.c cpu.c rom.c clock.c bus.c decoder.c
+CFILES 	= emulator.c rom.c clock.c decoder.c gameboy.c
 HFILES 	= $(CFILES:.c=.h)
 OFILES 	= $(CFILES:.c=.o)
 
-CFLAGS = -Wall -Wextra
+CFLAGS = -Wall -Wextra -Wno-unused-function -Wno-unused-parameter
 LDFLAGS = -lblackbox
 
 all: emulator

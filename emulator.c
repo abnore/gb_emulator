@@ -8,9 +8,8 @@
 #include <libgen.h>
 
 #include "rom.h"
-#include "bus.h"
-#include "cpu.h"
 #include "clock.h"
+#include "gameboy.h"
 
 int main(int argc, char **argv)
 {
@@ -31,19 +30,19 @@ int main(int argc, char **argv)
     /* --- Here we have the rom and is ready to go --- */
     init_clock();
 
-    CPU cpu = { .IME = true, .PC = ENTRY_POINT, .SP = 0xdfff };
-    Bus bus;
+    Gameboy gb = gb_init();
 
-    bus.rom = load_cartridge(argv[1], &bus.rom_size);
+    load_cartridge(argv[1], &gb);
 
     int safe_steps = 0;
-    while ( safe_steps < 100/*!cpu.halted*/ ){
-        cpu_step(&cpu, &bus);
+    while ( safe_steps < 100 /*!cpu.halted*/ ){
+        gb.cycles = gameboy_step(&gb);
+    //    next_cycle();
         safe_steps++;
     }
 
     /* Starting to check opcodes and investigating running the ROM */
-    remove_cartridge(bus.rom, bus.rom_size);
+    remove_cartridge(&gb);
     shutdown_log();
     return 0;
 }

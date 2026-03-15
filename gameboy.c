@@ -1,4 +1,19 @@
-#include "bus.h"
+#include "gameboy.h"
+#include "decoder.h"
+#include <blackbox.h>
+
+/* I am getting sick of passing the cpu and bus to every function. There should
+ * be a larger structure, or a global that holds both
+ */
+Gameboy gb_init(){
+    return (Gameboy){
+        .cpu.IME=true,
+        .cpu.PC=ENTRY_POINT,
+        .cpu.SP=0xdffe,
+        .bus.rom = NULL,
+        .cycles = 0,
+    };
+}
 
 /* Memory Map
    The Game Boy has a 16-bit address bus, which is used to address ROM, RAM,
@@ -22,8 +37,10 @@
  *
  * This will work for now, only touching what i have implemented so far
  */
-byte bus_read(Bus *bus, uint16_t addr)
+uint8_t bus_read(Gameboy *gb, uint16_t addr)
 {
+    Bus *bus = &gb->bus;
+
     if (addr <= 0x7FFF)
         return bus->rom[addr];
 
@@ -42,25 +59,44 @@ byte bus_read(Bus *bus, uint16_t addr)
     return 0xFF;
 }
 
-void bus_write(Bus *bus, uint16_t addr, byte value)
+void bus_write(Gameboy *gb, uint16_t addr, uint8_t value)
 {
+    Bus *bus = &gb->bus;
+
     if (addr >= 0xC000 && addr <= 0xDFFF) {
         bus->wram[addr - 0xC000] = value;
         return;
     }
-
     if (addr == 0xFF0F) {
         bus->i_flag = value;
         return;
     }
-
     if (addr >= 0xFF80 && addr <= 0xFFFE) {
         bus->hram[addr - 0xFF80] = value;
         return;
     }
-
     if (addr == 0xFFFF) {
         bus->i_enable = value;
         return;
     }
+}
+
+/* Fetched the opcode from the ROM and updated the program counter */
+uint8_t fetch(Gameboy *gb){
+    return bus_read(gb, gb->cpu.PC++);
+}
+
+/* Replacing the potentially 1k+ line switch case that was 62 lines after 6
+ * op-codes already */
+uint64_t gameboy_step(Gameboy *gb)
+{
+    uint64_t cycles;
+    /* Here we will have some clock/cycles logic to step through, I dont think
+     * i have to worry about that before i start with the graphics */
+    printf("0x%.4x - ", gb->cpu.PC);
+    uint8_t opcode = fetch(gb);
+    cycles = decoder(gb, opcode);
+    //printf("cycles: %llu\n", cycles);
+
+    return cycles;
 }

@@ -35,8 +35,8 @@ int main(int argc, char **argv)
     load_cartridge(argv[1], &gb);
 
     int safe_steps = 0;
-    while ( safe_steps >= 0 /*!gb.cpu.halted*/ ){
-        if (gameboy_step(&gb) == -1) break;
+    while ( safe_steps < 1<<22 /*!gb.cpu.halted*/ ){
+        gameboy_step(&gb);
     //    next_cycle();
         safe_steps++;
     }

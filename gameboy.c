@@ -97,7 +97,7 @@ int gameboy_step(Gameboy *gb)
     printf("0x%.4x - ", gb->cpu.PC);
     bool enable_ime_after = gb->cpu.ime_enable_pending;
     uint8_t opcode = fetch(gb);
-    printf("0x%.2x - ", opcode);
+    printf("0x%.2x\n", opcode);
     cycles = decoder(gb, opcode);
     if (enable_ime_after) {
         gb->cpu.IME = true;

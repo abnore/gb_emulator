@@ -28,7 +28,6 @@ int decoder(Gameboy *gb, uint8_t opcode);
 #define HLT 0x76
 #define HARDLOCK() for(;;)
 #define unreachable() __builtin_unreachable()
-
 /* Named enums such that i dont have to rely on magic index numbers in the
  * decoder and helper functions. I am switching on indexes, not actual values
  * therefore i need a system to differentiate. And they are always in the same

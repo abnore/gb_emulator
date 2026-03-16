@@ -1,11 +1,27 @@
 /* Main decoder function */
 #include <blackbox.h>
 #include <stdbool.h>
-
 #include "decoder.h"
 
+/* Function pointers to op-code matrix where it made sense */
+void (*rot[8])(Gameboy *gb, r8_e idx) = {
+    rlc, rrc, rl, rr, sla, sra, swap, srl
+};
+void (*alu[8])(Gameboy *gb, r8_e idx) = {
+    add_a, adc_a, sub_a, sbc_a, and_a, xor_a, or_a, cp_a
+};
+void (*bit_shift[8])(Gameboy *gb) = {
+    rlca, rrca, rla, rra, daa, cpl, scf, ccf
+};
+void (*alu_imm8[8])(Gameboy *gb) = {
+    add_a_imm8, adc_a_imm8, sub_a_imm8, sbc_a_imm8,
+    and_a_imm8, xor_a_imm8, or_a_imm8, cp_a_imm8
+};
+
 /* Fixed addresses for the reset vectors, in order */
-uint8_t rst_vec[8] = { 0x00, 0x08, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38 };
+static const uint8_t rst_vec[8] = {
+    0x00, 0x08, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38
+};
 
 /* Decodes the op code and returns the amount of cycles it spent */
 int decoder(Gameboy *gb, uint8_t opcode)
@@ -630,8 +646,6 @@ bool jr_cc_e8(Gameboy *gb, cc_e cc){
     if (cc_b)
         gb->cpu.PC += rel_address;
 
-    printf("JR cc=%d rel=%d F=%02x taken=%d\n", cc, rel_address, gb->cpu.F, cc_b);
-
     return cc_b;
 }
 /* Return from subroutine. This is basically a POP PC (if such an instruction
@@ -745,21 +759,17 @@ void di(Gameboy *gb){
     gb->cpu.IME = false;
     gb->cpu.ime_enable_pending = false;
 }
-/*
-   Enter CPU low-power consumption mode until an interrupt occurs.
-
-   The exact behavior of this instruction depends on the state of the IME flag,
-   and whether interrupts are pending (i.e. whether ‘[IE] & [IF]’ is non-zero):
-
-   If the IME flag is set: The CPU enters low-power mode until after an interrupt
-   is about to be serviced. The handler is executed normally, and the CPU resumes
-   execution after the HALT when that returns. If the IME flag is not set, and no
-   interrupts are pending: As soon as an interrupt becomes pending, the CPU
-   resumes execution. This is like the above, except that the handler is not
-   called. If the IME flag is not set, and some interrupt is pending: The CPU
-   continues execution after the HALT, but the byte after it is read twice in a
-   row (PC is not incremented, due to a hardware bug).
-   */
+/* Enter CPU low-power consumption mode until an interrupt occurs. The exact
+ * behavior of this instruction depends on the state of the IME flag, and
+ * whether interrupts are pending (i.e. whether ‘[IE] & [IF]’ is non-zero): If
+ * the IME flag is set: The CPU enters low-power mode until after an interrupt
+ * is about to be serviced. The handler is executed normally, and the CPU
+ * resumes execution after the HALT when that returns. If the IME flag is not
+ * set, and no interrupts are pending: As soon as an interrupt becomes pending,
+ * the CPU resumes execution. This is like the above, except that the handler
+ * is not called. If the IME flag is not set, and some interrupt is pending:
+ * The CPU continues execution after the HALT, but the byte after it is read
+ * twice in a row (PC is not incremented, due to a hardware bug). */
 void halt(Gameboy *gb) { gb->cpu.halted=true; }
 
 /* Miscellaneous instructions */
@@ -820,23 +830,39 @@ void stop(Gameboy *gb) { (void)read_imm8(gb); } // But ignores the result
 
 // ================ MAIN DECODERS =====================
 /* $CB prefix for the 8-bit shift, rotate and bit instructions extended table */
-
-void (*fn[8])(Gameboy *gb, r8_e idx) = { rlc, rrc, rl, rr, sla, sra, swap, srl };
-
 int cb_dispatch(Gameboy *gb){
     uint8_t next_op = fetch(gb);
 
     uint8_t x = next_op >> 6;
     uint8_t y = (next_op >> 3) & 7;
     uint8_t z = next_op & 7;
+    bool hl = (z==R8_HL);
 
     switch (x) {
-    case 0: fn[y](gb, z);        return (z==R8_HL)?16:8;
-    case 1: bit_u3_r8(gb, y, z); return (z==R8_HL)?12:8;
-    case 2: res_u3_r8(gb, y, z); return (z==R8_HL)?16:8;
-    case 3: set_u3_r8(gb, y, z); return (z==R8_HL)?16:8;
+    case 0: rot[y](gb, z);       return hl ? 16 : 8;
+    case 1: bit_u3_r8(gb, y, z); return hl ? 12 : 8;
+    case 2: res_u3_r8(gb, y, z); return hl ? 16 : 8;
+    case 3: set_u3_r8(gb, y, z); return hl ? 16 : 8;
     } unreachable();
 }
+/* Took this out for cleanliness and since the system was slighty different */
+static int decode_block0_z0(Gameboy *gb, uint8_t y)
+{
+    uint8_t p = y & 3;
+    uint8_t q = y >> 2;
+
+    if (!q) {
+        switch (p) {
+        case 0: nop();             return 4;
+        case 1: ld_mem_a16_sp(gb); return 20;
+        case 2: stop(gb);          return 4;
+        case 3: jr_e8(gb);         return 12;
+        }
+    }
+
+    return jr_cc_e8(gb, (cc_e)p) ? 12 : 8;
+}
+
 /* this block is kind of messy */
 int decode_block0(Gameboy *gb, uint8_t opcode)
 {
@@ -847,43 +873,43 @@ int decode_block0(Gameboy *gb, uint8_t opcode)
 
     switch (z) {
     case 0:
-        switch (y) {
-        case 0: printf("nop\n");                    nop();      return 4;
-        case 1: printf("ld [a16], sp\n");   ld_mem_a16_sp(gb);  return 20;
-        case 2: printf("stop\n");                stop(gb);      return 4;
-        case 3: printf("jr e8\n");              jr_e8(gb);      return 12;
-        default: printf("jr cc e8\n"); return jr_cc_e8(gb,(cc_e)(y-4))?12:8;
-        }
+        return decode_block0_z0(gb, y);
+
     case 1:
-        switch (q) {
-        case 0: ld_r16_imm16(gb, p); printf("ld n16\n");        return 12;
-        case 1: add_hl_r16(gb, p); printf("add r16 to HL\n");   return 8;
+        if (q) {
+            add_hl_r16(gb, p);
+            return 8;
         }
+        ld_r16_imm16(gb, p);
+        return 12;
+
     case 2:
-        switch (q) {
-        case 0: ld_mem_r16_a(gb, p); printf("ld_mem_r16_a\n");  return 8;
-        case 1: ld_a_mem_r16(gb, p); printf("ld_a_mem_r16\n");  return 8;
-        }
+        if (q)  ld_a_mem_r16(gb, p);
+        else    ld_mem_r16_a(gb, p);
+        return 8;
+
     case 3:
-        switch (q) {
-        case 0: inc_r16(gb, p); printf("inc r16\n");            return 8;
-        case 1: dec_r16(gb, p); printf("dec r16\n");            return 8;
-        }
-    case 4: inc_r8(gb, y); printf("inc r8\n");          return (y==R8_HL)?12:4;
-    case 5: dec_r8(gb, y); printf("dec r8\n");          return (y==R8_HL)?12:4;
-    case 6: ld_r8_imm8(gb, y); printf("ld r8 imm8\n");  return (y==R8_HL)?12:8;
+        if (q)  dec_r16(gb, p);
+        else    inc_r16(gb, p);
+        return 8;
+
+    case 4:
+        inc_r8(gb, y);
+        return ( y == R8_HL ) ? 12 : 4;
+
+    case 5:
+        dec_r8(gb, y);
+        return ( y == R8_HL ) ? 12 : 4;
+
+    case 6:
+        ld_r8_imm8(gb, y);
+        return ( y == R8_HL ) ? 12 : 8;
+
     case 7:
-        switch (y){
-        case 0: printf("rlca\n"); rlca(gb);                     return 4;
-        case 1: printf("rrca\n"); rrca(gb);                     return 4;
-        case 2: printf("rla\n");  rla(gb);                      return 4;
-        case 3: printf("rra\n");  rra(gb);                      return 4;
-        case 4: printf("daa\n");  daa(gb);                      return 4;
-        case 5: printf("cpl\n");  cpl(gb);                      return 4;
-        case 6: printf("scf\n");  scf(gb);                      return 4;
-        case 7: printf("ccf\n");  ccf(gb);                      return 4;
-        }
-    } unreachable();
+        bit_shift[y](gb);
+        return 4;
+    }
+    unreachable();
 }
 
 /* With the helpers and logic broken out, this function become really nice!
@@ -896,30 +922,23 @@ int decode_block1(Gameboy *gb, uint8_t opcode)
         return 4;
     }
 
-    r8_e dst = (opcode >> 3) & 7; // Clear, but maybe keep them as y and z?
+    r8_e dst = (opcode >> 3) & 7;
     r8_e src = opcode & 7;
+    int ret = (dst == R8_HL || src == R8_HL) ? 8 : 4;
 
     ld_r8_r8(gb, dst, src);
 
-    return (dst == R8_HL || src == R8_HL) ? 8 : 4;
+    return ret;
 }
 /* Same with block 2, we switch on op and src only */
 int decode_block2(Gameboy *gb, uint8_t opcode)
 {
     uint8_t op  = (opcode >> 3) & 7;  // which operation
     r8_e src = opcode & 7;            // which register
+    int ret = (src == R8_HL) ? 8 : 4;
+    alu[op](gb, src);
 
-    switch (op) {
-    case 0: printf("add src=%u\n", src); add_a(gb, src); break;
-    case 1: printf("adc src=%u\n", src); adc_a(gb, src); break;
-    case 2: printf("sub src=%u\n", src); sub_a(gb, src); break;
-    case 3: printf("sbc src=%u\n", src); sbc_a(gb, src); break;
-    case 4: printf("and src=%u\n", src); and_a(gb, src); break;
-    case 5: printf("xor src=%u\n", src); xor_a(gb, src); break;
-    case 6: printf("or src=%u\n", src);  or_a (gb, src); break;
-    case 7: printf("cp src=%u\n", src);  cp_a (gb, src); break;
-    }
-    return (src == R8_HL) ? 8 : 4;
+    return ret;
 }
 
 /* The last block has the extended block, and also looks like the place the rest
@@ -937,65 +956,52 @@ int decode_block3(Gameboy *gb, uint8_t opcode)
         case 0:
             switch (y){
             default: return ret_cc(gb, (cc_e)y) ? 20 : 8;
-            case 4: printf("ldh [a8], A\n"); ldh_mem_a8_a(gb);  return 12;
-            case 5: printf("add sp, e8\n"); add_sp_e8(gb);      return 16;
-            case 6: printf("ldh A, [a8]\n"); ldh_a_mem_a8(gb);  return 12;
-            case 7: printf("ld hl, sp+e8\n"); ld_hl_sp_e8(gb);  return 12;
+            case 4: ldh_mem_a8_a(gb);   return 12;
+            case 5: add_sp_e8(gb);      return 16;
+            case 6: ldh_a_mem_a8(gb);   return 12;
+            case 7: ld_hl_sp_e8(gb);    return 12;
             }
         case 1:
             if (!q){
-                printf("pop r16:%d\n",p);
-                write_r16stk(gb, (r16stk_e)p, pop16(gb));       return 12;
+                write_r16stk(gb, (r16stk_e)p, pop16(gb)); return 12;
             } else {
                 switch (p){
-                case 0: printf("ret\n"); ret(gb);               return 16;
-                case 1: printf("reti\n");reti(gb);              return 16;
-                case 2: printf("jp hl\n"); jp_hl(gb);           return 4;
-                case 3: printf("ld sp, hl\n"); ld_sp_hl(gb);    return 8;
+                case 0:  ret(gb);       return 16;
+                case 1:  reti(gb);      return 16;
+                case 2:  jp_hl(gb);     return 4;
+                case 3:  ld_sp_hl(gb);  return 8;
                 }
             }
         case 2:
             switch (y){
             default: return jp_cc_a16(gb, (cc_e)y) ? 16 : 12;
-            case 4: printf("ldh [C], A\n"); ldh_mem_c_a(gb);    return 8;
-            case 5: printf("ld [a16], A\n"); ld_mem_a16_a(gb);  return 16;
-            case 6: printf("ldh A, [C]\n"); ldh_a_mem_c(gb);    return 8;
-            case 7: printf("ld a, [a16]\n"); ld_a_mem_a16(gb);  return 16;
+            case 4: ldh_mem_c_a(gb);    return 8;
+            case 5: ld_mem_a16_a(gb);   return 16;
+            case 6: ldh_a_mem_c(gb);    return 8;
+            case 7: ld_a_mem_a16(gb);   return 16;
             }
         case 3:
             switch (y){
-            case 0: printf("jp to n16\n"); jp_a16(gb);          return 16;
-            case 1: printf("prefix - ");         return cb_dispatch(gb);
-            case 6: di(gb); printf("di\n");                     return 4;
-            case 7: ei(gb); printf("ei\n");                     return 4;
-            default: printf("HARDLOCK\n"); HARDLOCK();
+            case 0: jp_a16(gb);                 return 16;
+            case 1: return cb_dispatch(gb);
+            case 6: di(gb);                      return 4;
+            case 7: ei(gb);                      return 4;
+            default:  HARDLOCK();
             } break;
         case 4:
             if (y < 4) {
-                printf("call cc\n");
                 return call_cc_a16(gb, (cc_e)y) ? 24 : 12;
             }
-            printf("HARDLOCK\n"); HARDLOCK();
+             HARDLOCK();
         case 5:
             if (!q){
-                printf("push r16:%d\n",p);
                 push16(gb, read_r16stk(gb,(r16stk_e) p));       return 16;
             } else {
-                if (!p) { printf("call a16\n"); call_a16(gb);   return 24; }
-                else { printf("HARDLOCK\n"); HARDLOCK(); }
+                if (!p) { call_a16(gb);    return 24; }
+                else { HARDLOCK(); }
             }
-        case 6:
-            switch (y){
-            case 0: printf("add imm8 a\n"), add_a_imm8(gb);     return 8;
-            case 1: printf("adc imm8 a\n"), adc_a_imm8(gb);     return 8;
-            case 2: printf("sub imm8 a\n"), sub_a_imm8(gb);     return 8;
-            case 3: printf("sbc imm8 a\n"), sbc_a_imm8(gb);     return 8;
-            case 4: printf("and imm8 a\n"), and_a_imm8(gb);     return 8;
-            case 5: printf("xor imm8 a\n"), xor_a_imm8(gb);     return 8;
-            case 6: printf("or imm8 a\n"),  or_a_imm8(gb);      return 8;
-            case 7: printf("cp imm8 a\n"),  cp_a_imm8(gb);      return 8;
-            }
-        case 7: printf("rst\n"); rst(gb, rst_vec[y]);           return 16;
+        case 6:  alu_imm8[y](gb);          return 8;
+        case 7:  rst(gb, rst_vec[y]);      return 16;
     }
     unreachable();
 }

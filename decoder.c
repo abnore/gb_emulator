@@ -414,7 +414,6 @@ void xor_a_imm8(Gameboy *gb){
     xor_a_val(gb, read_imm8(gb));
 }
 
-
 /* --- Bit flag instructions --- */
 /* Test bit u3 in register r8, set the zero flag if bit not set.
  * Cycles: 2
@@ -451,7 +450,6 @@ void set_u3_r8(Gameboy *gb, uint8_t u3, r8_e idx){
     uint8_t bit = 1 << u3;
     write_r8(gb, idx, (value |= bit));
 }
-
 
 /* --- Bit shift instructions --- */
 // -----
@@ -774,7 +772,6 @@ void halt(Gameboy *gb) { gb->cpu.halted=true; }
 
 /* Miscellaneous instructions */
 
-
 /* Decimal Adjust Accumulator.
  * Designed to be used after performing an arithmetic instruction (ADD, ADC,
  * SUB, SBC) whose inputs were in Binary-Coded Decimal (BCD), adjusting the
@@ -828,6 +825,140 @@ void nop(void){ /* Silly function to implement */ }
 void stop(Gameboy *gb) { (void)read_imm8(gb); } // But ignores the result
 
 
+// ================ HELPERS FOR MAIN DECODERS =====================
+/* Split out the insides of the switches into helpers, such that the decode
+ * logic on the blocks are cleaner */
+static int decode_block0_z0(Gameboy *gb, uint8_t y){
+    uint8_t p = y & 3;
+    uint8_t q = y >> 2;
+
+    if (!q) {
+        switch (p) {
+        case 0: nop();             return 4;
+        case 1: ld_mem_a16_sp(gb); return 20;
+        case 2: stop(gb);          return 4;
+        case 3: jr_e8(gb);         return 12;
+        }
+    }
+    return jr_cc_e8(gb, (cc_e)p) ? 12 : 8;
+}
+static int decode_block0_z1(Gameboy *gb, uint8_t p, uint8_t q){
+    if (q) { add_hl_r16(gb, p); return 8; }
+    ld_r16_imm16(gb, p);
+    return 12;
+}
+static int decode_block0_z2(Gameboy *gb, uint8_t p, uint8_t q){
+    if (q) ld_a_mem_r16(gb, p);
+    else ld_mem_r16_a(gb, p);
+    return 8;
+}
+static int decode_block0_z3(Gameboy *gb, uint8_t p, uint8_t q){
+    if (q) dec_r16(gb, p);
+    else inc_r16(gb, p);
+    return 8;
+}
+static int decode_block0_z4(Gameboy *gb, uint8_t y){
+    inc_r8(gb, y);
+    return (y == R8_HL) ? 12 : 4;
+}
+static int decode_block0_z5(Gameboy *gb, uint8_t y){
+    dec_r8(gb, y);
+    return (y == R8_HL) ? 12 : 4;
+}
+static int decode_block0_z6(Gameboy *gb, uint8_t y){
+    ld_r8_imm8(gb, y);
+    return (y == R8_HL) ? 12 : 8;
+}
+static int decode_block0_z7(Gameboy *gb, uint8_t y){
+    bit_shift[y](gb);
+    return 4;
+}
+/* Block 3 turned out to be a messy dumping ground, and i decided to split the
+ * logic into helpers. there are some logic that can be found in each sub-block
+ *
+ * z0 and z2 has the same pattern as block0_z0 where we can switch on the lower
+ * 2 bits on y, and check the top bit instead. */
+static int decode_block3_z0(Gameboy *gb, uint8_t y){
+    uint8_t p = y & 3;
+    uint8_t q = y >> 2;
+
+    if (!q)
+        return ret_cc(gb, (cc_e)p) ? 20 : 8;
+
+    switch (p) {
+    case 0: ldh_mem_a8_a(gb); return 12;
+    case 1: add_sp_e8(gb);    return 16;
+    case 2: ldh_a_mem_a8(gb); return 12;
+    case 3: ld_hl_sp_e8(gb);  return 12;
+    }
+    unreachable();
+}
+static int decode_block3_z1(Gameboy *gb, uint8_t p, uint8_t q){
+    if (!q) {
+        write_r16stk(gb, (r16stk_e)p, pop16(gb));
+        return 12;
+    }
+    switch (p) {
+    case 0: ret(gb);      return 16;
+    case 1: reti(gb);     return 16;
+    case 2: jp_hl(gb);    return 4;
+    case 3: ld_sp_hl(gb); return 8;
+    }
+    unreachable();
+}
+static int decode_block3_z2(Gameboy *gb, uint8_t y){
+    uint8_t p = y & 3;
+    uint8_t q = y >> 2;
+
+    if (!q)
+        return jp_cc_a16(gb, (cc_e)p) ? 16 : 12;
+
+    switch (p) {
+    case 0: ldh_mem_c_a(gb);  return 8;
+    case 1: ld_mem_a16_a(gb); return 16;
+    case 2: ldh_a_mem_c(gb);  return 8;
+    case 3: ld_a_mem_a16(gb); return 16;
+    }
+    unreachable();
+}
+static int decode_block3_z3(Gameboy *gb, uint8_t y){
+    switch (y) {
+    case 0: jp_a16(gb);      return 16;
+    case 1: return cb_dispatch(gb);
+    case 6: di(gb);          return 4;
+    case 7: ei(gb);          return 4;
+    default:
+        HARDLOCK();
+    }
+    unreachable();
+}
+static int decode_block3_z4(Gameboy *gb, uint8_t y){
+    if (y < 4)
+        return call_cc_a16(gb, (cc_e)y) ? 24 : 12;
+    HARDLOCK();
+    unreachable();
+}
+static int decode_block3_z5(Gameboy *gb, uint8_t p, uint8_t q){
+    if (!q) {
+        push16(gb, read_r16stk(gb, (r16stk_e)p));
+        return 16;
+    }
+    if (!p) {
+        call_a16(gb);
+        return 24;
+    }
+    HARDLOCK();
+    unreachable();
+}
+static int decode_block3_z6(Gameboy *gb, uint8_t y){
+    alu_imm8[y](gb);
+    return 8;
+}
+static int decode_block3_z7(Gameboy *gb, uint8_t y){
+    rst(gb, rst_vec[y]);
+    return 16;
+}
+
 // ================ MAIN DECODERS =====================
 /* $CB prefix for the 8-bit shift, rotate and bit instructions extended table */
 int cb_dispatch(Gameboy *gb){
@@ -845,25 +976,7 @@ int cb_dispatch(Gameboy *gb){
     case 3: set_u3_r8(gb, y, z); return hl ? 16 : 8;
     } unreachable();
 }
-/* Took this out for cleanliness and since the system was slighty different */
-static int decode_block0_z0(Gameboy *gb, uint8_t y)
-{
-    uint8_t p = y & 3;
-    uint8_t q = y >> 2;
 
-    if (!q) {
-        switch (p) {
-        case 0: nop();             return 4;
-        case 1: ld_mem_a16_sp(gb); return 20;
-        case 2: stop(gb);          return 4;
-        case 3: jr_e8(gb);         return 12;
-        }
-    }
-
-    return jr_cc_e8(gb, (cc_e)p) ? 12 : 8;
-}
-
-/* this block is kind of messy */
 int decode_block0(Gameboy *gb, uint8_t opcode)
 {
     uint8_t y = (opcode >> 3) & 7;
@@ -872,42 +985,14 @@ int decode_block0(Gameboy *gb, uint8_t opcode)
     uint8_t q = y & 1;
 
     switch (z) {
-    case 0:
-        return decode_block0_z0(gb, y);
-
-    case 1:
-        if (q) {
-            add_hl_r16(gb, p);
-            return 8;
-        }
-        ld_r16_imm16(gb, p);
-        return 12;
-
-    case 2:
-        if (q)  ld_a_mem_r16(gb, p);
-        else    ld_mem_r16_a(gb, p);
-        return 8;
-
-    case 3:
-        if (q)  dec_r16(gb, p);
-        else    inc_r16(gb, p);
-        return 8;
-
-    case 4:
-        inc_r8(gb, y);
-        return ( y == R8_HL ) ? 12 : 4;
-
-    case 5:
-        dec_r8(gb, y);
-        return ( y == R8_HL ) ? 12 : 4;
-
-    case 6:
-        ld_r8_imm8(gb, y);
-        return ( y == R8_HL ) ? 12 : 8;
-
-    case 7:
-        bit_shift[y](gb);
-        return 4;
+    case 0: return decode_block0_z0(gb, y);
+    case 1: return decode_block0_z1(gb, p, q);
+    case 2: return decode_block0_z2(gb, p, q);
+    case 3: return decode_block0_z3(gb, p, q);
+    case 4: return decode_block0_z4(gb, y);
+    case 5: return decode_block0_z5(gb, y);
+    case 6: return decode_block0_z6(gb, y);
+    case 7: return decode_block0_z7(gb, y);
     }
     unreachable();
 }
@@ -936,72 +1021,29 @@ int decode_block2(Gameboy *gb, uint8_t opcode)
     uint8_t op  = (opcode >> 3) & 7;  // which operation
     r8_e src = opcode & 7;            // which register
     int ret = (src == R8_HL) ? 8 : 4;
+
     alu[op](gb, src);
 
     return ret;
 }
 
-/* The last block has the extended block, and also looks like the place the rest
- * of the opcodes just got dumped. This is messy - I will start with the ones
- * encountered, c3 etc, and then eventually fill out the rest
- */
+/* And then here is what we are left with. Aaaah clean */
 int decode_block3(Gameboy *gb, uint8_t opcode)
 {
     uint8_t z = opcode & 7;
     uint8_t y = (opcode >> 3) & 7;
     uint8_t q = y & 1;
-    uint8_t p = (y >> 1);
+    uint8_t p = y >> 1;
 
     switch (z) {
-        case 0:
-            switch (y){
-            default: return ret_cc(gb, (cc_e)y) ? 20 : 8;
-            case 4: ldh_mem_a8_a(gb);   return 12;
-            case 5: add_sp_e8(gb);      return 16;
-            case 6: ldh_a_mem_a8(gb);   return 12;
-            case 7: ld_hl_sp_e8(gb);    return 12;
-            }
-        case 1:
-            if (!q){
-                write_r16stk(gb, (r16stk_e)p, pop16(gb)); return 12;
-            } else {
-                switch (p){
-                case 0:  ret(gb);       return 16;
-                case 1:  reti(gb);      return 16;
-                case 2:  jp_hl(gb);     return 4;
-                case 3:  ld_sp_hl(gb);  return 8;
-                }
-            }
-        case 2:
-            switch (y){
-            default: return jp_cc_a16(gb, (cc_e)y) ? 16 : 12;
-            case 4: ldh_mem_c_a(gb);    return 8;
-            case 5: ld_mem_a16_a(gb);   return 16;
-            case 6: ldh_a_mem_c(gb);    return 8;
-            case 7: ld_a_mem_a16(gb);   return 16;
-            }
-        case 3:
-            switch (y){
-            case 0: jp_a16(gb);                 return 16;
-            case 1: return cb_dispatch(gb);
-            case 6: di(gb);                      return 4;
-            case 7: ei(gb);                      return 4;
-            default:  HARDLOCK();
-            } break;
-        case 4:
-            if (y < 4) {
-                return call_cc_a16(gb, (cc_e)y) ? 24 : 12;
-            }
-             HARDLOCK();
-        case 5:
-            if (!q){
-                push16(gb, read_r16stk(gb,(r16stk_e) p));       return 16;
-            } else {
-                if (!p) { call_a16(gb);    return 24; }
-                else { HARDLOCK(); }
-            }
-        case 6:  alu_imm8[y](gb);          return 8;
-        case 7:  rst(gb, rst_vec[y]);      return 16;
+    case 0: return decode_block3_z0(gb, y);
+    case 1: return decode_block3_z1(gb, p, q);
+    case 2: return decode_block3_z2(gb, y);
+    case 3: return decode_block3_z3(gb, y);
+    case 4: return decode_block3_z4(gb, y);
+    case 5: return decode_block3_z5(gb, p, q);
+    case 6: return decode_block3_z6(gb, y);
+    case 7: return decode_block3_z7(gb, y);
     }
     unreachable();
 }

@@ -25,6 +25,10 @@ int cb_dispatch(Gameboy *gb);
 
 int decoder(Gameboy *gb, uint8_t opcode);
 
+#define HLT 0x76
+#define HARDLOCK() for(;;)
+#define unreachable() __builtin_unreachable()
+
 /* Named enums such that i dont have to rely on magic index numbers in the
  * decoder and helper functions. I am switching on indexes, not actual values
  * therefore i need a system to differentiate. And they are always in the same
@@ -69,45 +73,6 @@ typedef enum {
     R16MEM_HL_DEC,
 } r16mem_e;
 
-
-/* Using this list as a Implemented/TODO, instead of in decoder.c
- *
- * TODO:
- *  rst
- *  rot_r8
- *  bit_r8
- *  res_r8
- *  set_r8
-
-n8 means immediate 8-bit data
-n16 means immediate little-endian 16-bit data
-a8 means 8-bit unsigned data, which is added to $FF00 in certain instructions
-    to create a 16-bit address in HRAM (High RAM)
-a16 means little-endian 16-bit address
-e8 means 8-bit signed data
-
-LDH A, [C] has the alternative mnemonic LD A, [$FF00+C]
-LDH [C], A has the alternative mnemonic LD [$FF00+C], A
-LD A, [HL+] has the alternative mnemonics LD A, [HLI] and LDI A, [HL]
-LD [HL+], A has the alternative mnemonics LD [HLI], A and LDI [HL], A
-LD A, [HL-] has the alternative mnemonics LD A, [HLD] and LDD A, [HL]
-LD [HL-], A has the alternative mnemonics LD [HLD], A and LDD [HL], A
-
-ALU instructions (ADD, ADC, SUB, SBC, AND, XOR, OR, and CP) can be written with
-the left-hand side A omitted. Thus for example ADD A, B has the alternative
-mnemonic ADD B, and CP A, $F has the alternative mnemonic CP $F.
-
-Z - Zero Flag
-N - Subtract Flag
-H - Half Carry Flag
-C - Carry Flag
-0 - The flag is reset
-1 - The flag is set
-- - The flag is left untouched
-
-If an operation has the flags defined as Z, N, H, or C, the corresponding flags
-are set as the operation performed dictates.
-*/
 
 /* Core helpers, operand machinery */
 uint8_t read_r8(Gameboy *gb, r8_e idx);
@@ -164,20 +129,23 @@ void xor_a(Gameboy *gb, r8_e idx);
 void xor_a_imm8(Gameboy *gb);
 
 /* Bit flag instructions */
-/*
-BIT u3,r8
-BIT u3,[HL]
-RES u3,r8
-RES u3,[HL]
-SET u3,r8
-SET u3,[HL]
-*/
+void bit_u3_r8(Gameboy *gb, uint8_t u3, r8_e idx);
+void res_u3_r8(Gameboy *gb, uint8_t u3, r8_e idx);
+void set_u3_r8(Gameboy *gb, uint8_t u3, r8_e idx);
 
 /* Bit shift instructions */
+void rl(Gameboy *gb, r8_e idx);
 void rla(Gameboy *gb);
+void rlc(Gameboy *gb, r8_e idx);
 void rlca(Gameboy *gb);
-void rrca(Gameboy *gb);
+void rr(Gameboy *gb, r8_e idx);
 void rra(Gameboy *gb);
+void rrc(Gameboy *gb, r8_e idx);
+void rrca(Gameboy *gb);
+void sla(Gameboy *gb, r8_e idx);
+void sra(Gameboy *gb, r8_e idx);
+void srl(Gameboy *gb, r8_e idx);
+void swap(Gameboy *gb, r8_e idx);
 
 /* Jumps and subroutine instructions */
 void call_a16(Gameboy *gb);
@@ -190,6 +158,7 @@ bool jp_cc_a16(Gameboy *gb, cc_e cc);
 void ret(Gameboy *gb);
 bool ret_cc(Gameboy *gb, cc_e cc);
 void reti(Gameboy *gb);
+void rst(Gameboy *gb, uint8_t address);
 
 /* Carry flag instructions */
 void ccf(Gameboy *gb);

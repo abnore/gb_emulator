@@ -1,0 +1,38 @@
+# Organized after 3 last bits, not hex values
+### xx yyy zzz
+### z=0 Specials, sorted after y
+### STOP: The opcode of this instruction is $10, but it has to be followed by an
+### additional byte that is ignored by the CPU (any value works, but normally $00
+### is used).
+###  x=0 z=r8 y=this list
+rlc  0x00    00 000 000
+rl   0x08    00 001 000
+sla  0x10    00 010 000
+swap 0x18    00 011 000
+rrc  0x20    00 100 000
+rr   0x28    00 101 000
+sra  0x30    00 110 000
+srl  0x38    00 111 000
+
+### x=1 z=r8 y=bits
+bit 0 0x01    00 000 000
+bit 1 0x09    00 001 000
+bit 2 0x11    00 010 000
+bit 3 0x19    00 011 000
+bit 4 0x21    00 100 000
+bit 5 0x29    00 101 000
+bit 6 0x31    00 110 000
+bit 7 0x39    00 111 000
+
+### x=2 same as above, only in res
+
+### x=3 z=r8 same as abote only now set
+0x03    00 000 011
+0x13    00 010 011
+0x23    00 100 011
+0x33    00 110 011
+0x0b    00 001 011
+0x1b    00 011 011
+0x2b    00 101 011
+0x3b    00 111 011
+

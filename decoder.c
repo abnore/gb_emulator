@@ -3,19 +3,47 @@
 #include <stdbool.h>
 #include "decoder.h"
 
+/* After doing the bit operations there was a lot of flag operations that were
+ * similar, and i broke out these helpers to try and keep all the repeating
+ * logic in one place, also keeping in mind the low nibble in F is always 0 */
+static bool test_flag(Gameboy *gb, flag f){
+    return (gb->cpu.F & f) != 0;
+}
+static void set_flag(Gameboy *gb, flag f){
+    gb->cpu.F |= f;
+}
+static void clear_flag(Gameboy *gb, flag f){
+    gb->cpu.F &= ~f;
+}
+static void assign_flag(Gameboy *gb, flag f, bool cond) {
+    if (cond) set_flag(gb, f);
+    else clear_flag(gb, f);
+}
+static void clear_znhc(Gameboy *gb) {
+    gb->cpu.F = 0;
+}
+static void keep_c_clear_zhn(Gameboy *gb) {
+    gb->cpu.F &= C_F;
+}
+
 /* Function pointers to op-code matrix where it made sense */
 void (*rot[8])(Gameboy *gb, r8_e idx) = {
     rlc, rrc, rl, rr, sla, sra, swap, srl
 };
-void (*alu[8])(Gameboy *gb, r8_e idx) = {
-    add_a, adc_a, sub_a, sbc_a, and_a, xor_a, or_a, cp_a
-};
 void (*bit_shift[8])(Gameboy *gb) = {
     rlca, rrca, rla, rra, daa, cpl, scf, ccf
 };
+void (*alu[8])(Gameboy *gb, r8_e idx) = {
+    add_a, adc_a,
+    sub_a, sbc_a,
+    and_a, xor_a,
+    or_a, cp_a
+};
 void (*alu_imm8[8])(Gameboy *gb) = {
-    add_a_imm8, adc_a_imm8, sub_a_imm8, sbc_a_imm8,
-    and_a_imm8, xor_a_imm8, or_a_imm8, cp_a_imm8
+    add_a_imm8, adc_a_imm8,
+    sub_a_imm8, sbc_a_imm8,
+    and_a_imm8, xor_a_imm8,
+    or_a_imm8,  cp_a_imm8
 };
 
 /* Fixed addresses for the reset vectors, in order */
@@ -132,12 +160,11 @@ void step_r16(Gameboy *gb, r16mem_e op){
     }
 }
 bool cc_true(Gameboy *gb, cc_e cc){
-    uint8_t flag = gb->cpu.F;
     switch (cc) {
-    case CC_NZ: return (flag & Z_F) == 0;
-    case CC_Z:  return (flag & Z_F) != 0;
-    case CC_NC: return (flag & C_F) == 0;
-    case CC_C:  return (flag & C_F) != 0;
+    case CC_NZ: return !test_flag(gb, Z_F);
+    case CC_Z:  return  test_flag(gb, Z_F);
+    case CC_NC: return !test_flag(gb, C_F);
+    case CC_C:  return  test_flag(gb, C_F);
     } unreachable();
 }
 
@@ -207,13 +234,13 @@ void ldh_a_mem_c(Gameboy *gb){
  * C Set if overflow from bit 7. */
 static void add_a_val(Gameboy *gb, uint8_t value, bool with_carry){
     uint8_t a = read_r8(gb, R8_A);
-    uint8_t carry = with_carry && (gb->cpu.F & C_F);
+    uint8_t carry = with_carry && test_flag(gb, C_F);
     uint16_t result = a + value + carry;
 
-    gb->cpu.F = 0;
-    if ((uint8_t)result == 0) gb->cpu.F |= Z_F;
-    if (((a & 0x0F) + (value & 0x0F) + carry ) > 0x0F) gb->cpu.F |= H_F;
-    if (result > 0xFF) gb->cpu.F |= C_F;
+    clear_flag(gb, N_F);
+    assign_flag(gb, Z_F, (uint8_t)result == 0);
+    assign_flag(gb, H_F, ((a & 0x0F) + (value & 0x0F) + carry ) > 0x0F);
+    assign_flag(gb, C_F, result > 0xFF);
 
     write_r8(gb, R8_A, (uint8_t)result);
 }
@@ -224,13 +251,13 @@ static void add_a_val(Gameboy *gb, uint8_t value, bool with_carry){
  * H Set if borrow from bit 4.
  * C Set if borrow (i.e. if r8 > A). */
 static void cp_a_val(Gameboy *gb, uint8_t value){
-    gb->cpu.F = N_F;
     uint8_t a = read_r8(gb, R8_A);
-    uint8_t res = a - value;
+    uint8_t result = a - value;
 
-    if (res == 0) gb->cpu.F |= Z_F;
-    if ((a & 0x0F) < (value & 0x0F)) gb->cpu.F |= H_F;
-    if (a < value) gb->cpu.F |= C_F;
+    set_flag(gb, N_F);
+    assign_flag(gb, Z_F, result == 0);
+    assign_flag(gb, H_F, (a & 0x0F) < (value & 0x0F));
+    assign_flag(gb, C_F, a < value);
 }
 /* Subtract a value, checking flags
  * Z Set if result is 0.
@@ -239,15 +266,14 @@ static void cp_a_val(Gameboy *gb, uint8_t value){
  * C Set if borrow (i.e. if r8 > A). */
 static void sub_a_val(Gameboy *gb, uint8_t value, bool with_carry){
     uint8_t a = read_r8(gb, R8_A);
-    uint8_t carry = with_carry && (gb->cpu.F & C_F);
+    uint8_t carry = with_carry && test_flag(gb, C_F);
     uint16_t sub = value + carry;
     uint8_t result = a - sub;
 
-    gb->cpu.F = N_F;
-
-    if (result == 0) gb->cpu.F |= Z_F;
-    if ((a & 0x0F) < ((value & 0x0F) + carry)) gb->cpu.F |= H_F;
-    if (a < sub) gb->cpu.F |= C_F;
+    set_flag(gb, N_F);
+    assign_flag(gb, Z_F, result == 0);
+    assign_flag(gb, H_F, (a & 0x0F) < ((value & 0x0F) + carry));
+    assign_flag(gb, C_F, a < sub);
 
     write_r8(gb, R8_A, result);
 }
@@ -278,10 +304,9 @@ void dec_r8(Gameboy *gb, r8_e idx){
     uint8_t old = read_r8(gb, idx);
     uint8_t value = old - 1;
 
-    gb->cpu.F &= C_F;
-    gb->cpu.F |= N_F;
-    if (value == 0)             gb->cpu.F |= Z_F;
-    if ((old & 0x0F) == 0x00)   gb->cpu.F |= H_F;
+    set_flag(gb, N_F);
+    assign_flag(gb, Z_F, value == 0);
+    assign_flag(gb, H_F, (old & 0x0f) == 0);
 
     write_r8(gb, idx, value);
 }
@@ -293,9 +318,9 @@ void inc_r8(Gameboy *gb, r8_e idx){
     uint8_t old = read_r8(gb, idx);
     uint8_t value = old + 1;
 
-    gb->cpu.F &= C_F;
-    if (value == 0)             gb->cpu.F |= Z_F;
-    if ((old & 0x0F) == 0x0F)   gb->cpu.F |= H_F;
+    keep_c_clear_zhn(gb);
+    assign_flag(gb, Z_F, value == 0);
+    assign_flag(gb, H_F, (old & 0x0f) == 0x0f);
 
     write_r8(gb, idx, value);
 }
@@ -324,12 +349,9 @@ void add_hl_r16(Gameboy *gb, r16_e idx){
     uint16_t value_hl = read_r16(gb, R16_HL);
     uint32_t result = value_r16 + value_hl; // Capturing overflow on bit 15
 
-    gb->cpu.F &= Z_F; // clears the rest, so N=0
-
-    if (((value_hl & 0x0FFF)+(value_r16 & 0x0FFF)) > 0x0FFF)
-        gb->cpu.F |= H_F;
-    if (result > 0xFFFF)
-        gb->cpu.F |= C_F;
+    clear_flag(gb, N_F);
+    assign_flag(gb, H_F, (value_hl & 0x0fff)+(value_r16 & 0x0fff) > 0x0fff);
+    assign_flag(gb, C_F, result > 0xffff);
 
     write_r16(gb, R16_HL, (uint16_t)result);
 }
@@ -349,13 +371,14 @@ void dec_r16(Gameboy *gb, r16_e idx){
  * H 1
  * C 0 */
 static void and_a_val(Gameboy *gb, uint8_t value){
-    gb->cpu.F = H_F;
     uint8_t a = read_r8(gb, R8_A);
-    uint8_t res = a & value;
+    uint8_t result = a & value;
 
-    if (res == 0) gb->cpu.F |= Z_F;
+    clear_znhc(gb);
+    set_flag(gb, H_F);
+    assign_flag(gb, Z_F, result == 0);
 
-    write_r8(gb, R8_A, res);
+    write_r8(gb, R8_A, result);
 }
 /* Set A to the bitwise XOR between the value in r8 and A.
  * Z Set if result is 0.
@@ -363,13 +386,13 @@ static void and_a_val(Gameboy *gb, uint8_t value){
  * H 0
  * C 0 */
 static void xor_a_val(Gameboy *gb, uint8_t value){
-    gb->cpu.F = 0;
     uint8_t a = read_r8(gb, R8_A);
-    uint8_t res = a ^ value;
+    uint8_t result = a ^ value;
 
-    if (res == 0) gb->cpu.F |= Z_F;
+    clear_znhc(gb);
+    assign_flag(gb, Z_F, result == 0);
 
-    write_r8(gb, R8_A, res);
+    write_r8(gb, R8_A, result);
 }
 /* Set A to the bitwise OR between the value in r8 and A.
  * Z Set if result is 0.
@@ -377,13 +400,13 @@ static void xor_a_val(Gameboy *gb, uint8_t value){
  * H 0
  * C 0 */
 static void or_a_val(Gameboy *gb, uint8_t value){
-    gb->cpu.F = 0;
     uint8_t a = read_r8(gb, R8_A);
-    uint8_t res = a | value;
+    uint8_t result = a | value;
 
-    if (res == 0) gb->cpu.F |= Z_F;
+    clear_znhc(gb);
+    assign_flag(gb, Z_F, result == 0);
 
-    write_r8(gb, R8_A, res);
+    write_r8(gb, R8_A, result);
 }
 // ===
 
@@ -399,7 +422,8 @@ void and_a_imm8(Gameboy *gb){
  * H 1 */
 void cpl(Gameboy *gb){
     gb->cpu.A = ~(gb->cpu.A);
-    gb->cpu.F |= N_F | H_F;
+    set_flag(gb, N_F);
+    set_flag(gb, H_F);
 }
 void or_a(Gameboy *gb, r8_e idx){
     or_a_val(gb, read_r8(gb, idx));
@@ -423,11 +447,9 @@ void xor_a_imm8(Gameboy *gb){
  * H 1 */
 void bit_u3_r8(Gameboy *gb, uint8_t u3, r8_e idx){
     uint8_t value = read_r8(gb, idx);
-    gb->cpu.F &= C_F;
-    gb->cpu.F |= H_F;
-    if (!((value >> u3) & 0x1)){
-        gb->cpu.F |= Z_F;
-    }
+    keep_c_clear_zhn(gb);
+    set_flag(gb, H_F);
+    assign_flag(gb, Z_F, !((value >> u3) & 0x1));
 }
 /* Set bit u3 in register r8 to 0. Bit 0 is the rightmost one, bit 7 the
  * leftmost one.
@@ -452,7 +474,6 @@ void set_u3_r8(Gameboy *gb, uint8_t u3, r8_e idx){
 }
 
 /* --- Bit shift instructions --- */
-// -----
 /* Rotate bits in register r8 left, through the carry flag.
  * Z Set if result is 0.
  * N 0
@@ -460,12 +481,14 @@ void set_u3_r8(Gameboy *gb, uint8_t u3, r8_e idx){
  * C Set according to result.*/
 void rl(Gameboy *gb, r8_e idx){
     uint8_t r8 = read_r8(gb, idx);
-    uint8_t c_f = (gb->cpu.F & C_F)?1:0;
-    gb->cpu.F = (r8 & 0x80) ? C_F : 0;
+    uint8_t c_f = test_flag(gb, C_F);
+
+    assign_flag(gb, C_F, (r8 & 0x80) != 0);
+    keep_c_clear_zhn(gb);
     r8 <<= 1;
     r8 |= c_f;
+    assign_flag(gb, Z_F, r8==0);
 
-    if (r8==0) gb->cpu.F |= Z_F;
     write_r8(gb, idx, r8);
 }
 /* rotates A left through the carry flag, so if top bit is high, and C flag was
@@ -475,8 +498,9 @@ void rla(Gameboy *gb){
     uint8_t c_bit = (r8_a & 0x80) >> 7;
 
     r8_a <<= 1;
-    r8_a |= (gb->cpu.F & C_F) ? 1 : 0 ;
-    gb->cpu.F = c_bit ? C_F : 0;
+    r8_a |= test_flag(gb, C_F);
+    clear_znhc(gb);
+    assign_flag(gb, C_F, c_bit);
 
     write_r8(gb, R8_A, r8_a);
 }
@@ -485,10 +509,11 @@ void rlc(Gameboy *gb, r8_e idx){
     uint8_t r8 = read_r8(gb, idx);
     uint8_t c_bit = (r8 & 0x80) >> 7;
 
+    clear_znhc(gb);
+    assign_flag(gb, C_F, c_bit);
     r8 <<= 1;
     r8 |= c_bit;
-    gb->cpu.F = c_bit ? C_F : 0;
-    gb->cpu.F |= (r8==0) ? Z_F : 0 ;
+    assign_flag(gb, Z_F, r8 == 0);
 
     write_r8(gb, idx, r8);
 }
@@ -497,9 +522,10 @@ void rlca(Gameboy *gb){
     uint8_t r8_a = read_r8(gb, R8_A);
     uint8_t c_bit = (r8_a & 0x80) >> 7;
 
+    clear_znhc(gb);
+    assign_flag(gb, C_F, c_bit);
     r8_a <<= 1;
     r8_a |= c_bit;
-    gb->cpu.F = c_bit ? C_F : 0;
 
     write_r8(gb, R8_A, r8_a);
 }
@@ -507,24 +533,27 @@ void rlca(Gameboy *gb){
  * to res, H and N 0*/
 void rr(Gameboy *gb, r8_e idx){
     uint8_t r8 = read_r8(gb, idx);
+    uint8_t c_f = test_flag(gb, C_F);
     uint8_t c_bit = r8 & 1;
 
+    assign_flag(gb, C_F, c_bit);
+    keep_c_clear_zhn(gb);
     r8 >>= 1;
-    r8 |= (gb->cpu.F & C_F) ? 0x80 : 0;
-
-    gb->cpu.F = c_bit ? C_F : 0;
-    gb->cpu.F |= r8 ? 0 : Z_F;
+    r8 |= c_f ? 0x80 : 0;
+    assign_flag(gb, Z_F, r8 == 0);
 
     write_r8(gb, idx, r8);
 }
 /* Rotate register A right, through the carry flag. */
 void rra(Gameboy *gb){
     uint8_t r8_a = read_r8(gb, R8_A);
+    uint8_t c_f = test_flag(gb, C_F);
     uint8_t c_bit = r8_a & 1;
 
+    assign_flag(gb, C_F, c_bit);
+    keep_c_clear_zhn(gb);
     r8_a >>= 1;
-    r8_a |= (gb->cpu.F & C_F) ? 0x80 : 0;
-    gb->cpu.F = c_bit ? C_F : 0;
+    r8_a |= c_f ? 0x80 : 0;
 
     write_r8(gb, R8_A, r8_a);
 }
@@ -533,10 +562,11 @@ void rrc(Gameboy *gb, r8_e idx){
     uint8_t r8 = read_r8(gb, idx);
     uint8_t c_bit = r8 & 1;
 
+    assign_flag(gb, C_F, c_bit);
+    keep_c_clear_zhn(gb);
     r8 >>= 1;
-    r8 |= (c_bit) ? 0x80 : 0;
-    gb->cpu.F = c_bit ? C_F : 0;
-    gb->cpu.F |= r8 ? 0 : Z_F;
+    r8 |= c_bit ? 0x80 : 0;
+    assign_flag(gb, Z_F, r8 == 0);
 
     write_r8(gb, idx, r8);
 }
@@ -545,18 +575,21 @@ void rrca(Gameboy *gb){
     uint8_t r8_a = read_r8(gb, R8_A);
     uint8_t c_bit = r8_a & 1;
 
+    clear_znhc(gb);
+    assign_flag(gb, C_F, c_bit);
     r8_a >>= 1;
     r8_a |= (c_bit << 7);
-    gb->cpu.F = c_bit ? C_F : 0;
 
     write_r8(gb, R8_A, r8_a);
 }
 /* Shift Left Arithmetically register r8. Z and C as normal */
 void sla(Gameboy *gb, r8_e idx){
     uint8_t r8 = read_r8(gb, idx);
-    gb->cpu.F = (r8 & 0x80) ? C_F : 0;
+
+    clear_znhc(gb);
+    assign_flag(gb, C_F, r8 & 0x80);
     r8<<=1;
-    gb->cpu.F |= r8 ? 0 : Z_F;
+    assign_flag(gb, Z_F, r8 == 0);
 
     write_r8(gb, idx, r8);
 }
@@ -565,28 +598,35 @@ void sla(Gameboy *gb, r8_e idx){
 void sra(Gameboy *gb, r8_e idx){
     uint8_t r8 = read_r8(gb, idx);
     uint8_t bit7 = r8 & 0x80;
-    gb->cpu.F = (r8 & 1) ? C_F : 0;
+
+    clear_znhc(gb);
+    assign_flag(gb, C_F, r8 & 1);
     r8>>=1;
-    gb->cpu.F |= r8 ? 0 : Z_F;
+    assign_flag(gb, Z_F, r8 == 0);
     r8 |= bit7;
+
     write_r8(gb, idx, r8);
 }
 /* Shift Right Logically register r8. Z and C as normal */
 void srl(Gameboy *gb, r8_e idx){
     uint8_t r8 = read_r8(gb, idx);
-    gb->cpu.F = (r8 & 1) ? C_F : 0;
+
+    clear_znhc(gb);
+    assign_flag(gb, C_F, r8 & 1);
     r8>>=1;
-    gb->cpu.F |= r8 ? 0 : Z_F;
+    assign_flag(gb, Z_F, r8 == 0);
+
     write_r8(gb, idx, r8);
 }
 /* Swap the upper 4 bits in register r8 and the lower 4 ones. flags 0, and Z*/
 void swap(Gameboy *gb, r8_e idx){
     uint8_t r8 = read_r8(gb, idx);
+
+    clear_znhc(gb);
     uint8_t top4 = r8 & 0xf0;
     uint8_t low4 = r8 & 0x0f;
-
     r8 = (low4 << 4) | top4;
-    gb->cpu.F = (r8==0) ? Z_F : 0;
+    assign_flag(gb, Z_F, r8 == 0);
 
     write_r8(gb, idx, r8);
 }
@@ -678,13 +718,16 @@ void rst(Gameboy *gb, uint8_t address){
 }
 /* --- Carry flag instructions --- */
 void scf(Gameboy *gb){
-    gb->cpu.F &= Z_F; // preserve this, N and H is 0
-    gb->cpu.F |= C_F;
+    assign_flag(gb, C_F, true);
+    clear_flag(gb, N_F);
+    clear_flag(gb, H_F);
 }
 void ccf(Gameboy *gb){
-    bool cf = gb->cpu.F & C_F;
-    gb->cpu.F &= Z_F; // 0 all except Z_F
-    if (!cf) gb->cpu.F |= C_F; // if not set, set - otherwise stay
+    bool c_f = test_flag(gb, C_F);
+
+    assign_flag(gb, C_F, !c_f);
+    clear_flag(gb, N_F);
+    clear_flag(gb, H_F);
 }
 
 /* --- Stack manipulation instructions --- */
@@ -698,12 +741,11 @@ void add_sp_e8(Gameboy *gb){
     uint16_t value_sp = read_r16(gb, R16_SP);
     uint16_t result = value_e8 + value_sp;
 
-    gb->cpu.F = 0;
-
-    if (((value_sp & 0x0F) + ((uint8_t)value_e8 & 0x0F)) > 0x0F)
-        gb->cpu.F |= H_F;
-    if (((value_sp & 0xFF) + ((uint8_t)value_e8 & 0xFF)) > 0xFF)
-        gb->cpu.F |= C_F;
+    clear_znhc(gb);
+    bool overflow_b3 = ((value_sp & 0x0F) + ((uint8_t)value_e8 & 0x0F)) > 0x0F;
+    bool overflow_b7 = ((value_sp & 0xFF) + ((uint8_t)value_e8 & 0xFF)) > 0xFF;
+    assign_flag(gb, H_F, overflow_b3);
+    assign_flag(gb, C_F, overflow_b7);
 
     write_r16(gb, R16_SP, result);
 }
@@ -721,10 +763,12 @@ void ld_hl_sp_e8(Gameboy *gb){
     uint16_t sp = read_r16(gb, R16_SP);
     int8_t e8 = (int8_t)read_imm8(gb);
     uint16_t result = sp + e8;
-    gb->cpu.F = 0;
 
-    if (((sp & 0x0F) + ((uint8_t)e8 & 0x0F)) > 0x0F) gb->cpu.F |= H_F;
-    if (((sp & 0xFF) + ((uint8_t)e8 & 0xFF)) > 0xFF) gb->cpu.F |= C_F;
+    clear_znhc(gb);
+    bool overflow_b3 = ((sp & 0x0F) + ((uint8_t)e8 & 0x0F)) > 0x0F;
+    bool overflow_b7 = ((sp & 0xFF) + ((uint8_t)e8 & 0xFF)) > 0xFF;
+    assign_flag(gb, H_F, overflow_b3);
+    assign_flag(gb, C_F, overflow_b7);
 
     write_r16(gb, R16_HL, result);
 }
@@ -796,31 +840,30 @@ void halt(Gameboy *gb) { gb->cpu.halted=true; }
  * C Set or unaffected depending on the operation. */
 void daa(Gameboy *gb)
 {
-    bool N_set = gb->cpu.F & N_F;
-    bool H_set = gb->cpu.F & H_F;
-    bool C_set = gb->cpu.F & C_F;
+    bool N_set = test_flag(gb, N_F);
+    bool H_set = test_flag(gb, H_F);
+    bool C_set = test_flag(gb, C_F);
     uint8_t adjustment = 0;
-    uint8_t result = 0;
 
-    gb->cpu.F = 0;
+    clear_znhc(gb);
 
     if (N_set) {
         if (H_set) adjustment += 0x6;
         if (C_set) adjustment += 0x60;
-        result = gb->cpu.A -= adjustment;
+        gb->cpu.A -= adjustment;
     } else {
         if (H_set || (gb->cpu.A & 0xF) > 0x9) adjustment += 0x6;
         if (C_set || gb->cpu.A > 0x99) {
             adjustment += 0x60;
-            C_set=true;
+            C_set = true;
         }
-        result = gb->cpu.A += adjustment;
+        gb->cpu.A += adjustment;
     }
-
-    if (result == 0) gb->cpu.F |= Z_F;
-    if (C_set) gb->cpu.F |= C_F;
-    if (N_set) gb->cpu.F |= N_F;
+    assign_flag(gb, Z_F, gb->cpu.A == 0);
+    assign_flag(gb, C_F, C_set);
+    assign_flag(gb, N_F, N_set);
 }
+
 void nop(void){ /* Silly function to implement */ }
 void stop(Gameboy *gb) { (void)read_imm8(gb); } // But ignores the result
 

@@ -16,6 +16,6 @@ typedef struct {
 #define SCLOCK	MCLOCK>>2   // 1.048576 or 1/4 av the master clock
 
 void init_clock(void);
-int next_cycle();
+int next_cycle(void);
 
 #endif //CLOCK_H_

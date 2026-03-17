@@ -72,6 +72,14 @@ typedef enum {
     R16MEM_HL_DEC,
 } r16mem_e;
 
+/*
+bool test_flag(Gameboy *gb, flag f);
+void set_flag(Gameboy *gb, flag f);
+void clear_flag(Gameboy *gb, flag f);
+void assign_flag(Gameboy *gb, flag f, bool cond);
+void clear_znhc(Gameboy *gb);
+void keep_c_clear_zhn(Gameboy *gb);
+*/
 
 /* Core helpers, operand machinery */
 uint8_t read_r8(Gameboy *gb, r8_e idx);

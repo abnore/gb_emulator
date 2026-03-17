@@ -34,7 +34,7 @@ void init_clock(void){
 }
 
 /* We timestamp the start, then after a while we timestamp*/
-int next_cycle(){
+int next_cycle(void){
 
     uint64_t t1 = mach_absolute_time();
 

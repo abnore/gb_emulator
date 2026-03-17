@@ -47,6 +47,7 @@ typedef struct {
 
     uint8_t wram[0x2000];   // C000-DFFF
     uint8_t hram[0x7f];     // FF80-FFFE
+    uint8_t vram[0x2000];   //
     uint8_t i_enable;       // IE - FFFF
     uint8_t i_flag;         // IF - FF0F
 } Bus;
@@ -57,7 +58,7 @@ typedef struct Gameboy{
     uint64_t cycles;
 } Gameboy;
 
-Gameboy gb_init();
+Gameboy gb_init(void);
 
 /* These helpers fetched the op code and reads and writes to the bus.
  * They take care of the addressing to which piece of hardware gets what.

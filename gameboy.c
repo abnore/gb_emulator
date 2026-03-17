@@ -5,7 +5,7 @@
 /* I am getting sick of passing the cpu and bus to every function. There should
  * be a larger structure, or a global that holds both
  */
-Gameboy gb_init(){
+Gameboy gb_init(void){
     return (Gameboy){
         .cpu.IME    = true,
         .cpu.PC     = ENTRY_POINT,

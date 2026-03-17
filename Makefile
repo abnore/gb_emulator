@@ -6,7 +6,6 @@ CFLAGS = -Wall -Wextra -Wno-unused-function -Wno-unused-parameter
 LDFLAGS = -lblackbox
 
 all: emulator
-	@rm *.o
 
 %.o: %.c %.h
 	$(CC) $(CFLAGS) -c $<

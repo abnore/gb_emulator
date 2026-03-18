@@ -28,6 +28,17 @@ int decoder(Gameboy *gb, uint8_t opcode);
 #define HLT 0x76
 #define HARDLOCK() for(;;)
 #define unreachable() __builtin_unreachable()
+
+/* The flags register, F, contains 4 flags in bit 7-4
+ * https://gbdev.io/pandocs/CPU_Registers_and_Flags.html
+ */
+typedef enum{
+    Z_F = 1<<7, // Zero flag
+    N_F = 1<<6, // Subtraction flag (BCD)
+    H_F = 1<<5, // Half Carry flag (BCD)
+    C_F = 1<<4, // Carry flag
+} flag;
+
 /* Named enums such that i dont have to rely on magic index numbers in the
  * decoder and helper functions. I am switching on indexes, not actual values
  * therefore i need a system to differentiate. And they are always in the same

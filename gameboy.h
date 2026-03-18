@@ -47,7 +47,7 @@ typedef struct {
 
     uint8_t wram[0x2000];   // C000-DFFF
     uint8_t hram[0x7f];     // FF80-FFFE
-    uint8_t vram[0x2000];   //
+    uint8_t vram[0x2000];   // 8000	9FFF
     uint8_t i_enable;       // IE - FFFF
     uint8_t i_flag;         // IF - FF0F
 } Bus;
@@ -67,16 +67,6 @@ Gameboy gb_init(void);
 uint8_t fetch(Gameboy *gb);
 uint8_t bus_read(Gameboy *gb, uint16_t addr);
 void bus_write(Gameboy *gb, uint16_t addr, uint8_t value);
-
-/* The flags register, F, contains 4 flags in bit 7-4
- * https://gbdev.io/pandocs/CPU_Registers_and_Flags.html
- */
-typedef enum{
-    Z_F = 1<<7, // Zero flag
-    N_F = 1<<6, // Subtraction flag (BCD)
-    H_F = 1<<5, // Half Carry flag (BCD)
-    C_F = 1<<4, // Carry flag
-}flag;
 
 /* After boot up, this is where the cartridge stores the header and first
  * instruction. We can go straight there, even though the *real* entry is,

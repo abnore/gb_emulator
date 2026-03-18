@@ -39,21 +39,31 @@ uint8_t bus_read(Gameboy *gb, uint16_t addr)
 {
     Bus *bus = &gb->bus;
 
+    // ROM/cartridge data
     if (addr <= 0x7FFF)
         return bus->rom[addr];
 
+    // 8k work RAM
     if (addr >= 0xC000 && addr <= 0xDFFF)
         return bus->wram[addr - 0xC000];
 
+    // 8k of Video RAM!
+    if (addr >= 0x8000 && addr <= 0x9FFF)
+        return bus->vram[addr - 0x8000];
+
+    // interrupt flaga
     if (addr == 0xFF0F)
         return bus->i_flag;
 
+    // High RAM
     if (addr >= 0xFF80 && addr <= 0xFFFE)
         return bus->hram[addr - 0xFF80];
 
+    // Interrupt enable flag
     if (addr == 0xFFFF)
         return bus->i_enable;
 
+    // LY hack to get it past the scanline loop, to check if op codes were good
     if (addr == 0xFF44)
         return 0x94;
 
@@ -94,11 +104,12 @@ int gameboy_step(Gameboy *gb)
     uint64_t cycles;
     /* Here we will have some clock/cycles logic to step through, I dont think
      * i have to worry about that before i start with the graphics */
-    printf("0x%.4x - ", gb->cpu.PC);
+//    printf("0x%.4x - ", gb->cpu.PC);
     bool enable_ime_after = gb->cpu.ime_enable_pending;
     uint8_t opcode = fetch(gb);
-    printf("0x%.2x\n", opcode);
+ //   printf("0x%.2x\n", opcode);
     cycles = decoder(gb, opcode);
+
     if (enable_ime_after) {
         gb->cpu.IME = true;
         gb->cpu.ime_enable_pending = false;

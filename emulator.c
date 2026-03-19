@@ -13,11 +13,13 @@
 #include <string.h>
 #include <unistd.h>
 #include <libgen.h>
+#include <stdlib.h>
 
 #include "rom.h"
 #include "clock.h"
 #include "gameboy.h"
 #include "graphics.h"
+#include "sound.h"
 
 #define SCALE 2
 #define WIDTH 160
@@ -67,17 +69,45 @@ void test_pattern(uint32_t *buf)
             int i = y * WIDTH + x;
 
             buf[i] = dmg_palette[3];
-            //checkerboard with only two - & 3 for 4 colors.
-            //switch ((x + y) & 1) {
-            //case 0: buf[i] = WHITE;      break;
-            //case 1: buf[i] = BLACK;      break;
-            //case 1: buf[i] = LIGHT_GRAY; break;
-            //case 2: buf[i] = DARK_GRAY;  break;
-            //case 3: buf[i] = BLACK;      break;
-            //}
         }
     }
 }
+
+/* Stolen from a audio test. Just makes a pulse wave and sweeps the pitch up.
+ * Simple way of checking if the engine works. For now its good enough
+ */
+static void make_test_tone(Sound *sound)
+{
+    uint32_t frames = AUDIO_SAMPLE_RATE * AUDIO_SECONDS;
+    int16_t *samples = malloc(frames * sizeof(int16_t));
+
+    if (!samples) {
+        FATAL("Failed to allocate audio test buffer");
+        exit(1);
+    }
+
+    sound->buffer = (uint8_t *)samples;
+    sound->buffer_size = frames * sizeof(int16_t);
+    sound->read_pos = 0;
+
+    float phase = 0.0f;
+    float start_freq = 220.0f;
+    float end_freq   = 660.0f;
+    float duty = 0.25f;
+
+    for (uint32_t i = 0; i < frames; i++) {
+        float t = (float)i / (float)frames;
+        float freq = start_freq + (end_freq - start_freq) * t;
+
+        phase += freq / (float)AUDIO_SAMPLE_RATE;
+        if (phase >= 1.0f)
+            phase -= 1.0f;
+
+        samples[i] = (phase < duty) ? AUDIO_AMPLITUDE : -AUDIO_AMPLITUDE;
+    }
+}
+
+
 int main(int argc, char **argv)
 {
     init_log(LOG_DEFAULT);
@@ -94,6 +124,9 @@ int main(int argc, char **argv)
         return 2;
     }
 
+    rect src = { 0, 0, WIDTH, HEIGHT };
+    rect dst = { 0, 0, WIDTH * SCALE, HEIGHT * SCALE };
+
     /* --- Windowing stuff here, timer for fps and frame etc --- */
     Window *w = create_window("Gameboy Emulator - DMG-01", WIDTH*SCALE, HEIGHT*SCALE,
                                   CANOPY_WINDOW_STYLE_TITLED    |
@@ -104,10 +137,10 @@ int main(int argc, char **argv)
     set_icon(ICON);
     framebuffer *fb = get_framebuffer(w); // Here we will draw!
     clear_framebuffer(fb, dmg_palette[DMG_SHADE_1]);
+    Sound *sound = init_audio();
 
+    make_test_tone(sound);
     test_pattern(gb_fb);
-    rect src = { 0, 0, WIDTH, HEIGHT };
-    rect dst = { 0, 0, WIDTH * SCALE, HEIGHT * SCALE };
     blit_scaled_u32(fb, gb_fb, WIDTH, HEIGHT, src, dst);
 
     /* Using my custom event system to handle key inputs */
@@ -117,6 +150,8 @@ int main(int argc, char **argv)
     init_clock();
     Gameboy gb = gb_init();
     load_cartridge(argv[1], &gb);
+    sound->volume = 0.1f;
+    play_audio(sound);
 
     /* Starting to check opcodes and investigating running the ROM */
     while( !window_should_close(w) )
@@ -133,6 +168,8 @@ int main(int argc, char **argv)
         }
     }
 
+    stop_audio(sound);
+    free_audio(sound);
     free_window(w);
     remove_cartridge(&gb);
     shutdown_log();

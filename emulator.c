@@ -34,6 +34,8 @@ static uint32_t gb_fb[PIXELS];
  * are next to eachother, homerow and easy to be on. Vim motions as well */
 void controller(Window *w, canopy_event_key* e)
 {
+    Sound *s = get_window_user_data(w);
+
     if (e->action == CANOPY_KEY_PRESS) {
         switch (e->keycode) {
         case CANOPY_KEY_ESCAPE:
@@ -44,10 +46,12 @@ void controller(Window *w, canopy_event_key* e)
         case CANOPY_KEY_A: WARN("<");break;
         case CANOPY_KEY_S: WARN("v");break;
         case CANOPY_KEY_D: WARN(">");break;
-        case CANOPY_KEY_V: WARN("select");break;
-        case CANOPY_KEY_B: WARN("start");break;
-        case CANOPY_KEY_J: WARN("B");break;
-        case CANOPY_KEY_K: WARN("A");break;
+        case CANOPY_KEY_V: WARN("select - pause"); pause_audio(s); break;
+        case CANOPY_KEY_B: WARN("start - play"); play_audio(s); break;
+        case CANOPY_KEY_J: WARN("B - stop"); stop_audio(s); break;
+        case CANOPY_KEY_K: WARN("A"); break;
+        case CANOPY_KEY_Y: WARN("volume up"); volume_up(s); break;
+        case CANOPY_KEY_T: WARN("volume down"); volume_down(s); break;
         default: break;
         }
     }
@@ -133,11 +137,13 @@ int main(int argc, char **argv)
                                   CANOPY_WINDOW_STYLE_CLOSABLE  |
                                   CANOPY_WINDOW_STYLE_MINIATURIZABLE
                                   );
+    Sound *sound = init_audio();
     init_timer();
     set_icon(ICON);
+
     framebuffer *fb = get_framebuffer(w); // Here we will draw!
     clear_framebuffer(fb, dmg_palette[DMG_SHADE_1]);
-    Sound *sound = init_audio();
+    set_window_user_data(w, sound);
 
     make_test_tone(sound);
     test_pattern(gb_fb);
@@ -150,25 +156,20 @@ int main(int argc, char **argv)
     init_clock();
     Gameboy gb = gb_init();
     load_cartridge(argv[1], &gb);
-    sound->volume = 0.1f;
-    play_audio(sound);
+    // play_audio(sound);
 
     /* Starting to check opcodes and investigating running the ROM */
     while( !window_should_close(w) )
     {
         dispatch_events(w);
-
         //gameboy_step(&gb);
-        //next_cycle();
 
-        if (should_render_frame())
-        {
+        if (should_render_frame()) {
             // swap_backbuffer(w,bf);
             present_buffer(w);
         }
     }
 
-    stop_audio(sound);
     free_audio(sound);
     free_window(w);
     remove_cartridge(&gb);

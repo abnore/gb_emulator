@@ -32,5 +32,30 @@ void free_audio(Sound *sound);
 
 void play_audio(Sound *sound);
 void stop_audio(Sound *sound);
+void pause_audio(Sound *sound);
+
+void volume_down(Sound *sound);
+void volume_up(Sound *sound);
+
+/* Redefines to fit my style and readability better
+ * AU - Audio Unit
+ *
+ * Type */
+#define AU_TYPE_OUTPUT            kAudioUnitType_Output
+#define AU_SUBTYPE_DEFAULT_OUTPUT kAudioUnitSubType_DefaultOutput
+#define AU_MFR_APPLE              kAudioUnitManufacturer_Apple
+
+/* Format */
+#define AU_FMT_LINEAR_PCM         kAudioFormatLinearPCM
+#define AU_FMT_SIGNED_INT         kAudioFormatFlagIsSignedInteger
+#define AU_FMT_PACKED             kAudioFormatFlagIsPacked
+
+/* Property */
+#define AU_PROP_STREAM_FORMAT     kAudioUnitProperty_StreamFormat
+#define AU_PROP_RENDER_CALLBACK   kAudioUnitProperty_SetRenderCallback
+
+/* Scope */
+#define AU_SCOPE_INPUT            kAudioUnitScope_Input
+#define AU_SCOPE_GLOBAL           kAudioUnitScope_Global
 
 #endif // SOUND_H

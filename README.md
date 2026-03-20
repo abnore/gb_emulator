@@ -21,6 +21,10 @@ for windowing and events (canopy + picasso), sound (...coming) and logging (blac
 - [icon](https://www.shareicon.net/gameboy-190630)
 - [palette](https://lospec.com/palette-list/dmg-01-accurate)
 
+<p align="center">
+<img src="assets/dmg-01-accurate-32x.png" alt="Screen" width="96">
+</p>
+
 >[!NOTE]
 >This project is without any assistance from LLMs/AI, and is only for learning
 >purposes. I am practicing reading documentation, and I am treating this as a puzzle I
@@ -28,3 +32,7 @@ for windowing and events (canopy + picasso), sound (...coming) and logging (blac
 
 This will be a DMG (Dot Matrix Game, original GB) version for now, but will maybe move to
 Color version later.
+
+<p align="center">
+  <img src="assets/screen.jpg" alt="Screen">
+</p>

@@ -6,7 +6,12 @@
  * goes back to the start. It reads one mono sample from the buffer, scales is
  * by volume, and writes it both to the left and right output before advancing
  * the playback position.
+ *
  * <https://developer.apple.com/documentation/audiotoolbox/aurendercallback>
+ *  - The library pages are much better explained
+ * <https://developer.apple.com/library/archive/documentation/MusicAudio/
+ *  Conceptual/CoreAudioOverview/Introduction/Introduction.html>
+ *
  */
 static OSStatus sound_callback(void *in_sound_data,
         AudioUnitRenderActionFlags *io_action_flags,

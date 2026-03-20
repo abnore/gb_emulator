@@ -1,12 +1,15 @@
 #ifndef SOUND_H
 #define SOUND_H
 
-/* The simplest audio engine thinkable
+/* The simplest audio engine thinkable using the Core Audio API, AudioToolBox:
  * <https://developer.apple.com/documentation/audiotoolbox/audio-unit-v2-c-api>
  *
- * This API is a nightmare to work with. Reusing some old code from when i was
- * researching miniaudio.h, raylibs backend audio driver. Many fine examples,
- * and really well documented.
+ * This API is a nightmare to work with. The docs separate into smaller chunks,
+ * making searching and reading a pain. Types arent explained at the same place
+ * they are used, and it is documented in Swift.
+ *
+ * Reusing some old code from when i was researching miniaudio.h, raylibs
+ * backend audio driver. Many fine examples, and really well documented.
  *
  * The gameboy will generate a stream of PCM samples which the playback backend
  * will retrieve and play, for now its enough to play a single stream of samples
@@ -14,6 +17,7 @@
 #include <stdint.h>
 #include <AudioToolbox/AudioToolbox.h>
 
+/* Simple PCM format for the test in emulator.c this may have to change later */
 #define AUDIO_SAMPLE_RATE 48000
 #define AUDIO_FREQ        330
 #define AUDIO_SECONDS     2

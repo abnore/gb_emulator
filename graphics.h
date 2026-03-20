@@ -11,21 +11,25 @@ enum {
     DMG_SHADE_1,
     DMG_SHADE_2,
     DMG_SHADE_3,
-    DMG_SHADE_4
+    DMG_SHADE_4,
+    DMG_BG_GRAY,
+    DMG_SHADE_COUNT,
 };
 
-static const uint32_t dmg_palette_alt[4] = {
+static const uint32_t dmg_palette_alt[] = {
     0xFF8EC659,
     0xFF88BA47,
     0xFF7AAB47,
-    0xFF50863F
+    0xFF50863F,
+    0xff303030,
 };
 
-static const uint32_t dmg_palette[4] = {
+static const uint32_t dmg_palette[] = {
     0xff3f9e9a,
     0xff226b49,
     0xff0b450e,
     0xff092a1b,
+    0xff303030,
 };
 typedef struct {
     int x, y, width, height;

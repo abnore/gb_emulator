@@ -22,11 +22,40 @@
 #include "sound.h"
 
 #define SCALE 2
-#define WIDTH 160
-#define HEIGHT 144
-#define PIXELS WIDTH*HEIGHT
+#define LCD_W 160
+#define LCD_H 144
 
-static uint32_t gb_fb[PIXELS];
+#define BG_W 256
+#define BG_H 256
+#define PIXELS LCD_W*LCD_H
+
+int nintendo_logo[][48] = {
+    {1,1,0,0,0,1,1,0,1,1,0,0,0,0,0,0,
+     0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+     0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0},
+    {1,1,1,0,0,1,1,0,1,1,0,0,0,0,0,0,
+     0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,
+     0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0},
+    {1,1,1,0,0,1,1,0,0,0,0,0,0,0,0,0,
+     0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,
+     0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0},
+    {1,1,0,1,0,1,1,0,1,1,0,1,1,0,1,1,
+     0,0,1,1,0,0,1,1,1,1,0,0,1,1,0,1,
+     1,0,0,0,1,1,1,1,1,0,0,1,1,1,1,0},
+    {1,1,0,1,0,1,1,0,1,1,0,1,1,1,0,1,
+     1,0,1,1,0,1,1,0,0,1,1,0,1,1,1,0,
+     1,1,0,1,1,0,0,1,1,0,1,1,0,0,1,1},
+    {1,1,0,0,1,1,1,0,1,1,0,1,1,0,0,1,
+     1,0,1,1,0,1,1,1,1,1,1,0,1,1,0,0,
+     1,1,0,1,1,0,0,1,1,0,1,1,0,0,1,1},
+    {1,1,0,0,1,1,1,0,1,1,0,1,1,0,0,1,
+     1,0,1,1,0,1,1,0,0,0,0,0,1,1,0,0,
+     1,1,0,1,1,0,0,1,1,0,1,1,0,0,1,1},
+    {1,1,0,0,0,1,1,0,1,1,0,1,1,0,0,1,
+     1,0,1,1,0,0,1,1,1,1,1,0,1,1,0,0,
+     1,1,0,0,1,1,1,1,1,0,0,1,1,1,1,0}
+};
+static uint32_t lcd_fb[PIXELS];
 
 /* Callback function for dispatch_events(), all key input will be handle here
  * wasd is the D-pad, v and b is select and start, respecfully. they are in the
@@ -63,16 +92,28 @@ void clear_framebuffer(framebuffer *fb, uint32_t col){
     }
 }
 
-void test_pattern(uint32_t *buf)
+void test_pattern(uint32_t *buf, int logo_y)
 {
-    for(int i=0; i < HEIGHT * WIDTH; ++i){
-        buf[i] = dmg_palette[0];
-    }
-    for (int y = HEIGHT/2 - 10; y < HEIGHT/2 + 10; ++y) {
-        for (int x = WIDTH/2 - 40 ; x < WIDTH/2 + 40; ++x) {
-            int i = y * WIDTH + x;
+    const int logo_h = 8;
+    const int logo_w = 48;
 
-            buf[i] = dmg_palette[3];
+    int start_x = (LCD_W - logo_w) / 2;
+
+    for (int i = 0; i < LCD_W * LCD_H; i++) {
+        buf[i] = dmg_palette[DMG_SHADE_1];
+    }
+
+    for (int y = 0; y < logo_h; y++) {
+        for (int x = 0; x < logo_w; x++) {
+            int px = start_x + x;
+            int py = logo_y + y;
+
+            if (px < 0 || px >= LCD_W || py < 0 || py >= LCD_H)
+                continue;
+
+            if (nintendo_logo[y][x]) {
+                buf[py * LCD_W + px] = dmg_palette[DMG_SHADE_4];
+            }
         }
     }
 }
@@ -128,11 +169,9 @@ int main(int argc, char **argv)
         return 2;
     }
 
-    rect src = { 0, 0, WIDTH, HEIGHT };
-    rect dst = { 0, 0, WIDTH * SCALE, HEIGHT * SCALE };
 
     /* --- Windowing stuff here, timer for fps and frame etc --- */
-    Window *w = create_window("Gameboy Emulator - DMG-01", WIDTH*SCALE, HEIGHT*SCALE,
+    Window *w = create_window("Gameboy Emulator - DMG-01", BG_W*SCALE, BG_H*SCALE,
                                   CANOPY_WINDOW_STYLE_TITLED    |
                                   CANOPY_WINDOW_STYLE_CLOSABLE  |
                                   CANOPY_WINDOW_STYLE_MINIATURIZABLE
@@ -141,13 +180,26 @@ int main(int argc, char **argv)
     init_timer();
     set_icon(ICON);
 
-    framebuffer *fb = get_framebuffer(w); // Here we will draw!
-    clear_framebuffer(fb, dmg_palette[DMG_SHADE_1]);
     set_window_user_data(w, sound);
-
     make_test_tone(sound);
-    test_pattern(gb_fb);
-    blit_scaled_u32(fb, gb_fb, WIDTH, HEIGHT, src, dst);
+
+    framebuffer *fb = get_framebuffer(w); // Here we will draw!
+    clear_framebuffer(fb, dmg_palette[DMG_BG_GRAY]);
+    int final_logo_y = (LCD_H - 8) / 2;
+    int logo_y = -8;   // start above the LCD
+
+    rect src = { 0, 0, LCD_W, LCD_H };
+
+    int view_x = (BG_W - LCD_W) / 2;
+    int view_y = (BG_H - LCD_H) / 2;
+
+    rect dst = {
+        view_x * fb->width  / BG_W,
+        view_y * fb->height / BG_H,
+        LCD_W  * fb->width  / BG_W,
+        LCD_H  * fb->height / BG_H
+    };
+    blit_scaled_u32(fb, lcd_fb, LCD_W, LCD_H, src, dst);
 
     /* Using my custom event system to handle key inputs */
     set_callback_key(controller);
@@ -157,15 +209,23 @@ int main(int argc, char **argv)
     Gameboy gb = gb_init();
     load_cartridge(argv[1], &gb);
     // play_audio(sound);
-
-    /* Starting to check opcodes and investigating running the ROM */
-    while( !window_should_close(w) )
+    int anim_counter = 0;
+    while (!window_should_close(w))
     {
         dispatch_events(w);
-        //gameboy_step(&gb);
 
         if (should_render_frame()) {
-            // swap_backbuffer(w,bf);
+            anim_counter++;
+
+            if ((anim_counter % 3) == 0 && logo_y < final_logo_y) {
+                logo_y += 1;
+                if (logo_y > final_logo_y)
+                    logo_y = final_logo_y;
+            }
+
+            clear_framebuffer(fb, dmg_palette[DMG_BG_GRAY]);
+            test_pattern(lcd_fb, logo_y);
+            blit_scaled_u32(fb, lcd_fb, LCD_W, LCD_H, src, dst);
             present_buffer(w);
         }
     }

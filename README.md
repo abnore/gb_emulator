@@ -16,7 +16,7 @@ Inspired, and nerd-sniped, by the community at [gbdev.io](https://gbdev.io/).
 This is a version in pure C, with no external third-party dependencies, using my own libraries
 for:
 - windowing and events ([canopy](https://github.com/abnore/canopy) + what i need from [picasso](https://github.com/abnore/picasso)),
-- sound (custom sound engine built with on the AudioToolBox framework, read [here](https://developer.apple.com/library/archive/documentation/MusicAudio/Conceptual/CoreAudioOverview/CoreAudioFrameworks/CoreAudioFrameworks.html) for an overview on the Core Audio Frameworks)
+- sound (custom sound engine built on Apples Core Audio APIs, read [here](https://developer.apple.com/library/archive/documentation/MusicAudio/Conceptual/CoreAudioOverview/CoreAudioFrameworks/CoreAudioFrameworks.html) for an overview on the Core Audio frameworks)
 - logging ([blackbox](https://github.com/abnore/blackbox)).
 
 This will be a DMG (Dot Matrix Game, original GB) version for now, but will maybe move to

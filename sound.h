@@ -3,6 +3,8 @@
 
 /* The simplest audio engine thinkable using the Core Audio API, AudioToolBox:
  * <https://developer.apple.com/documentation/audiotoolbox/audio-unit-v2-c-api>
+ * since AudioUnit is deprecated, apple say to use the Audio Unit types in
+ * Audio Toolbox instead, specifically the v2 C api.
  *
  * This API is a nightmare to work with. The docs separate into smaller chunks,
  * making searching and reading a pain. Types arent explained at the same place

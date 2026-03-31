@@ -4,23 +4,6 @@
  * This will act as the internal layer to supply the emulation with a real
  * way to draw, while thinking it is interacting with hardware */
 
-#define _ABS(a) ({                                  \
-    __typeof__(a) _a = (a);                         \
-    _a > 0 ? _a : -_a;                              \
-})
-
-#define _MIN(a,b) ({                                \
-    __typeof__(a) _a = (a);                         \
-    __typeof__(b) _b = (b);                         \
-    _a < _b ? _a : _b;                              \
-})
-
-#define _MAX(a,b) ({                                \
-    __typeof__(a) _a = (a);                         \
-    __typeof__(b) _b = (b);                         \
-    _a > _b ? _a : _b;                              \
-})
-
 static inline uint32_t *get_pixel_u32(framebuffer *fb, int x, int y) {
     return &fb->pixels[y * fb->width + x];
 }
@@ -53,6 +36,61 @@ static bool _clip_rect_to_bounds(framebuffer *fb, const rect *r, draw_bounds *db
     return true;
 }
 
+static void blit_logo(uint32_t *buf, int logo_y)
+{
+    const int logo_h = 8;
+    const int logo_w = 48;
+
+    int start_x = (LCD_W - logo_w) / 2;
+
+    for (int i = 0; i < LCD_W * LCD_H; i++) {
+        buf[i] = dmg_palette[DMG_SHADE_1];
+    }
+
+    for (int y = 0; y < logo_h; y++) {
+        for (int x = 0; x < logo_w; x++) {
+            int px = start_x + x;
+            int py = logo_y + y;
+
+            if (px < 0 || px >= LCD_W || py < 0 || py >= LCD_H)
+                continue;
+
+            if (nintendo_logo[y][x]) {
+                buf[py * LCD_W + px] = dmg_palette[DMG_SHADE_4];
+            }
+        }
+    }
+}
+
+void animate_logo(Window *w, framebuffer *fb, rect src, rect dst)
+{
+    int final_logo_y = (LCD_H - 8) / 2;
+    int logo_y = -8;   // start above the LCD
+    int anim_counter = 0;
+    int anim_done = 0;
+
+    while (!window_should_close(w)){
+        pump_messages();
+        if (should_render_frame()) {
+            anim_counter++;
+
+            if ((anim_counter % 3) == 0 && logo_y < final_logo_y) {
+                logo_y += 1;
+                if (logo_y == final_logo_y) {
+                    logo_y = final_logo_y;
+                    anim_done = 1;
+                }
+            }
+
+            blit_logo(lcd_fb, logo_y);
+            blit_scaled(fb, lcd_fb, LCD_W, LCD_H, src, dst);
+            present_buffer(w);
+        }
+        if (anim_done) break;
+    }
+}
+/* Scaled to match the content scaling on macOS. High DPI support in Canopy
+ * requires me to support it */
 void blit_scaled(framebuffer *dst, const uint32_t *src,
                      int src_width, int src_height,
                      rect src_r, rect dst_r)
@@ -88,5 +126,11 @@ void blit_scaled(framebuffer *dst, const uint32_t *src,
 
             *get_pixel_u32(dst, dst_x, dst_y) = src[src_y * src_width + src_x];
         }
+    }
+}
+
+void clear_framebuffer(framebuffer *fb, uint32_t col){
+    for (int i = 0; i <  fb->width * fb->height; i++){
+        fb->pixels[i] = col;
     }
 }

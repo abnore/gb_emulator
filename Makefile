@@ -1,20 +1,23 @@
-BIN		= Gameboy
+BIN     = Gameboy
+OBJ     = obj
 
-CFILES 	= emulator.c rom.c clock.c decoder.c gameboy.c graphics.c sound.c
-HFILES 	= $(CFILES:.c=.h)
-OFILES 	= $(CFILES:.c=.o)
-ICON	= assets/gameboy.png
+CFILES  = emulator.c rom.c clock.c decoder.c gameboy.c graphics.c sound.c
+OFILES = $(addprefix $(OBJ)/, $(CFILES:.c=.o))
+ICON    = assets/gameboy.png
 
-CFLAGS = -Wall -Wextra -DICON=\"$(ICON)\"
+CFLAGS  = -Wall -Wextra -DICON=\"$(ICON)\"
 LDFLAGS = -lblackbox -lcanopy -framework AudioToolBox
 
 all: $(BIN)
 
-%.o: %.c %.h
-	$(CC) $(CFLAGS) -c $<
+$(OBJ):
+	mkdir -p $(OBJ)
+
+$(OBJ)/%.o: %.c | $(OBJ)
+	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BIN): $(OFILES)
 	$(CC) -o $@ $^ $(LDFLAGS)
 
 clean:
-	rm -f $(BIN) *.o
+	rm -rf $(BIN) $(OBJ)

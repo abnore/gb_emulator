@@ -31,6 +31,9 @@ static OSStatus sound_callback(void *in_sound_data,
      * and it will be sent to the speakers, LRLR etc according to out format
      */
     Sound *sound = in_sound_data; // have to cast in to known structure
+    /* For the test we created the audio as 16bit mono PCM, so we have to cast
+     * to read it correctly. It gets duplicated for the stereo effect. How the
+     * actual gameboy needs it will perhaps change this implementation later */
     int16_t *samples = (int16_t *)sound->buffer;
 
     AudioBuffer *audio_buf = &io_data->mBuffers[0];
@@ -157,6 +160,7 @@ void rewind_sound(Sound *sound)
 
     if (sound->step >= 6) sound->step = 1;
 }
+
 void fforward_sound(Sound *sound)
 {
     if( sound->dir == FORWARD ) sound->step++;
@@ -164,6 +168,7 @@ void fforward_sound(Sound *sound)
 
     if (sound->step >= 6) sound->step = 1;
 }
+
 /* Linear steps for now while putting together the engine, it should be based on
  * logarithms by mapping it to a gain curve using decibels. That is the way it
  * works best for our ears, but can figure that out later, and does it belong
@@ -183,3 +188,35 @@ void volume_up(Sound *sound)
     if (sound->volume > 1.0f)
         sound->volume = 1.0f;
 }
+
+
+/* Stolen from a audio test. Just makes a pulse wave and sweeps the pitch up.
+ * Simple way of checking if the engine works. For now its good enough
+ */
+void make_test_tone(Sound *sound)
+{
+    uint32_t frames = AUDIO_SAMPLE_RATE * AUDIO_SECONDS;
+    int16_t *samples = malloc(frames * sizeof(int16_t));
+
+    sound->buffer = (uint8_t *)samples;
+    sound->buffer_size = frames * sizeof(int16_t);
+    sound->samples_amount = sound->buffer_size / 2;
+    sound->read_pos = 0;
+
+    float phase = 0.0f;
+    float start_freq = 110.0f;
+    float end_freq   = 880.0f;
+    float duty = 0.25f;
+
+    for (uint32_t i = 0; i < frames; i++) {
+        float t = (float)i / (float)frames;
+        float freq = start_freq + (end_freq - start_freq) * t;
+
+        phase += freq / (float)AUDIO_SAMPLE_RATE;
+        if (phase >= 1.0f)
+            phase -= 1.0f;
+
+        samples[i] = (phase < duty) ? AUDIO_AMPLITUDE : -AUDIO_AMPLITUDE;
+    }
+}
+

@@ -101,6 +101,8 @@ void fforward_sound(Sound *sound);
 void volume_down(Sound *sound);
 void volume_up(Sound *sound);
 
+void make_test_tone(Sound *sound);
+
 /* Redefines to fit my style and readability better. Also, doing this forces
  * me to read the docs and actually find all the types and header files on my
  * system

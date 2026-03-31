@@ -39,7 +39,7 @@ typedef struct {
     int x0, y0, x1, y1;
 } draw_bounds;
 
-void blit_scaled_u32(
+void blit_scaled(
         framebuffer *dst, const uint32_t *src,
         int src_width, int src_height,
         rect src_r, rect dst_r);

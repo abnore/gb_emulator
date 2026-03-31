@@ -224,7 +224,6 @@ void ldh_a_mem_c(Gameboy *gb){
     write_r8(gb, R8_A, bus_read(gb, addr));
 }
 
-
 /* --- 8-bit arithmetic instructions --- */
 // === Internal helpers
 /* Add a value to A - checking flags and carry
@@ -336,7 +335,6 @@ void sbc_a(Gameboy *gb, r8_e idx){
 void sbc_a_imm8(Gameboy *gb){
     sub_a_val(gb, read_imm8(gb), true);
 }
-
 
 /* --- 16-bit arithmetic instructions --- */
 /* special add operation

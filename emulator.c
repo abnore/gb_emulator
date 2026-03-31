@@ -65,20 +65,20 @@ void controller(Window *w, canopy_event_key* e)
 {
     Sound *s = get_window_user_data(w);
 
-    if (e->action == CANOPY_KEY_PRESS) {
-        switch (e->keycode) {
-        case CANOPY_KEY_ESCAPE:
-            INFO("Closing the window, because you pressed esc");
-            set_window_should_close(w);
-            break;
+    if (e->action == CANOPY_KEY_PRESS)
+    {
+        switch (e->keycode)
+        {
+        case CANOPY_KEY_ESCAPE: set_window_should_close(w); break;
         case CANOPY_KEY_W: WARN("^");break;
         case CANOPY_KEY_A: WARN("<");break;
         case CANOPY_KEY_S: WARN("v");break;
         case CANOPY_KEY_D: WARN(">");break;
-        case CANOPY_KEY_V: WARN("select - pause"); pause_audio(s); break;
-        case CANOPY_KEY_B: WARN("start - play"); play_audio(s); break;
-        case CANOPY_KEY_J: WARN("B - stop"); stop_audio(s); break;
-        case CANOPY_KEY_K: WARN("A"); break;
+        case CANOPY_KEY_V: WARN("select"); break;
+        case CANOPY_KEY_B: WARN("start - play"); play_pause_sound(s); break;
+        case CANOPY_KEY_J: WARN("B - stop"); stop_sound(s); break;
+        case CANOPY_KEY_K: WARN("A - rewind"); rewind_sound(s); break;
+        case CANOPY_KEY_L: WARN("fforward"); fforward_sound(s); break;
         case CANOPY_KEY_Y: WARN("volume up"); volume_up(s); break;
         case CANOPY_KEY_T: WARN("volume down"); volume_down(s); break;
         default: break;
@@ -126,18 +126,14 @@ static void make_test_tone(Sound *sound)
     uint32_t frames = AUDIO_SAMPLE_RATE * AUDIO_SECONDS;
     int16_t *samples = malloc(frames * sizeof(int16_t));
 
-    if (!samples) {
-        FATAL("Failed to allocate audio test buffer");
-        exit(1);
-    }
-
     sound->buffer = (uint8_t *)samples;
     sound->buffer_size = frames * sizeof(int16_t);
+    sound->samples_amount = sound->buffer_size / 2;
     sound->read_pos = 0;
 
     float phase = 0.0f;
-    float start_freq = 220.0f;
-    float end_freq   = 660.0f;
+    float start_freq = 110.0f;
+    float end_freq   = 880.0f;
     float duty = 0.25f;
 
     for (uint32_t i = 0; i < frames; i++) {
@@ -170,21 +166,22 @@ int main(int argc, char **argv)
     }
 
 
-    /* --- Windowing stuff here, timer for fps and frame etc --- */
+    /* --- Windowing stuff here --- */
     Window *w = create_window("Gameboy Emulator - DMG-01", BG_W*SCALE, BG_H*SCALE,
                                   CANOPY_WINDOW_STYLE_TITLED    |
                                   CANOPY_WINDOW_STYLE_CLOSABLE  |
                                   CANOPY_WINDOW_STYLE_MINIATURIZABLE
                                   );
-    Sound *sound = init_audio();
-    init_timer();
     set_icon(ICON);
+    Sound *sound = init_audio();
 
     set_window_user_data(w, sound);
     make_test_tone(sound);
+    INFO("Buffer size %i", sound->buffer_size);
 
     framebuffer *fb = get_framebuffer(w); // Here we will draw!
     clear_framebuffer(fb, dmg_palette[DMG_BG_GRAY]);
+
     int final_logo_y = (LCD_H - 8) / 2;
     int logo_y = -8;   // start above the LCD
 
@@ -199,19 +196,18 @@ int main(int argc, char **argv)
         LCD_W  * fb->width  / BG_W,
         LCD_H  * fb->height / BG_H
     };
-    blit_scaled_u32(fb, lcd_fb, LCD_W, LCD_H, src, dst);
 
     /* Using my custom event system to handle key inputs */
-    set_callback_key(controller);
+    set_callback_key(w, controller);
 
     /* --- Here we get the rom and is ready to go --- */
-    init_clock();
     Gameboy gb = gb_init();
     load_cartridge(argv[1], &gb);
-    // play_audio(sound);
+
     int anim_counter = 0;
     while (!window_should_close(w))
     {
+        pump_messages();
         dispatch_events(w);
 
         if (should_render_frame()) {
@@ -223,9 +219,8 @@ int main(int argc, char **argv)
                     logo_y = final_logo_y;
             }
 
-            clear_framebuffer(fb, dmg_palette[DMG_BG_GRAY]);
             test_pattern(lcd_fb, logo_y);
-            blit_scaled_u32(fb, lcd_fb, LCD_W, LCD_H, src, dst);
+            blit_scaled(fb, lcd_fb, LCD_W, LCD_H, src, dst);
             present_buffer(w);
         }
     }

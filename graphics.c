@@ -4,6 +4,23 @@
  * This will act as the internal layer to supply the emulation with a real
  * way to draw, while thinking it is interacting with hardware */
 
+#define _ABS(a) ({                                  \
+    __typeof__(a) _a = (a);                         \
+    _a > 0 ? _a : -_a;                              \
+})
+
+#define _MIN(a,b) ({                                \
+    __typeof__(a) _a = (a);                         \
+    __typeof__(b) _b = (b);                         \
+    _a < _b ? _a : _b;                              \
+})
+
+#define _MAX(a,b) ({                                \
+    __typeof__(a) _a = (a);                         \
+    __typeof__(b) _b = (b);                         \
+    _a > _b ? _a : _b;                              \
+})
+
 static inline uint32_t *get_pixel_u32(framebuffer *fb, int x, int y) {
     return &fb->pixels[y * fb->width + x];
 }
@@ -28,15 +45,15 @@ static bool _clip_rect_to_bounds(framebuffer *fb, const rect *r, draw_bounds *db
         r->x + r->width <= 0 || r->y + r->height <= 0)
         return false;
 
-    db->x0 = (r->x > 0) ? r->x : 0;
-    db->y0 = (r->y > 0) ? r->y : 0;
-    db->x1 = (r->x + r->width  < (int)fb->width)  ? r->x + r->width  : (int)fb->width;
-    db->y1 = (r->y + r->height < (int)fb->height) ? r->y + r->height : (int)fb->height;
+    db->x0 = _MAX(r->x, 0);
+    db->y0 = _MAX(r->y, 0);
+    db->x1 = _MIN(r->x + r->width, (int)fb->width);
+    db->y1 = _MIN(r->y + r->height, (int)fb->height);
 
     return true;
 }
 
-void blit_scaled_u32(framebuffer *dst, const uint32_t *src,
+void blit_scaled(framebuffer *dst, const uint32_t *src,
                      int src_width, int src_height,
                      rect src_r, rect dst_r)
 {
@@ -50,12 +67,11 @@ void blit_scaled_u32(framebuffer *dst, const uint32_t *src,
 
     if (src_r.x < 0) src_r.x = 0;
     if (src_r.y < 0) src_r.y = 0;
-    if (src_r.x + src_r.width > src_width)
-        src_r.width = src_width - src_r.x;
-    if (src_r.y + src_r.height > src_height)
-        src_r.height = src_height - src_r.y;
+    if (src_r.x + src_r.width > src_width) src_r.width = src_width - src_r.x;
+    if (src_r.y + src_r.height > src_height) src_r.height = src_height - src_r.y;
 
     draw_bounds bounds;
+
     if (!_clip_rect_to_bounds(dst, &dst_r, &bounds))
         return;
 

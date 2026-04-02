@@ -6,7 +6,7 @@ OFILES = $(addprefix $(OBJ)/, $(CFILES:.c=.o))
 ICON    = assets/gameboy.png
 
 CFLAGS  = -Wall -Wextra -DICON=\"$(ICON)\"
-LDFLAGS = -lblackbox -lcanopy -framework AudioToolBox
+LDFLAGS = -lblackbox -lcanopy -framework AudioToolBox -framework CoreAudio
 
 all: $(BIN)
 

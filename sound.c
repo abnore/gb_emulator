@@ -1,4 +1,29 @@
+#include <CoreAudio/CoreAudio.h>
+#include <math.h>
+
 #include "sound.h"
+/* Stolen from: https://blog.demofox.org/2015/04/14/decibels-db-and-amplitude/
+ * */
+static float dB_to_amplitude(float dB){
+    return pow(10.0f, dB/20.0f);
+}
+#if 0
+static float amplitude_to_dB(float amplitude){
+    return 20.0f * log10(amplitude);
+}
+#else
+/* https://discuss.cakewalk.com/topic/21083-cakewalk-and-reaper-which-one-and-why/page/5/
+ * Alternate, maybe better, version:
+ *  db = 20 * log10(amplitude)
+ *  But it can be cheaper (in terms of CPU) to calculate
+ *          6.02 * log2(amplitude), where 6.02 ~= 20 * log10(2)
+ *  log10(2) = 0.301029996, 20 x log10(2) = 6.020599913
+ * */
+static float amplitude_to_dB(float amplitude){
+    return 6.02 * log2(amplitude);
+}
+#endif
+
 /* The callback takes action on the sound we define, it takes in_sound_data,
  * which is the struct we pass as the Sound objects. It treats the buffer as
  * mono 16-bit samples, and for each frame requested by Core Audio (Apples
@@ -39,23 +64,24 @@ static OSStatus sound_callback(void *in_sound_data,
     AudioBuffer *audio_buf = &io_data->mBuffers[0];
     int16_t *out = audio_buf->mData; // UnsafeMutableRawPointer, same as void*
 
-
     for (uint32_t i = 0; i < in_num_frames; i++)
     {
         // Unless playing and conditions met, we output 0 to the speakers
         int16_t s = 0;
 
         /* If we are playing but we have reached the end, stop and reset */
-        if (sound->playing && (sound->read_pos >= (int)sound->samples_amount
-            || ( sound->read_pos == 0 && sound->dir == REWIND )) )
+        if ( sound->playing )
         {
-            sound->playing = false;
-            sound->read_pos = 0;
-        } else if (sound->playing)
-        {
-            s = samples[sound->read_pos];
-            s = (int16_t)(s * sound->volume); // mapping it to decibel first?
-            sound->read_pos += sound->step * sound->dir;
+            if ( (sound->read_pos >= (int)sound->samples_amount) ||
+                 (sound->read_pos == 0 && sound->dir == REWIND) )
+            {
+                sound->playing = false;
+                sound->read_pos = 0;
+            } else {
+                s = samples[sound->read_pos];
+                s = (int16_t)(s * sound->gain);
+                sound->read_pos += sound->step * sound->dir;
+            }
         }
 
         out[i * 2]      = s;     // left [even]
@@ -67,20 +93,27 @@ static OSStatus sound_callback(void *in_sound_data,
 
 /* Basic audio init boilerplate stuff. This gets the default output, sets PCM
  * format, hooks in the callback and initializes the unit.
+ * Think of the Audio Component (Audio Unit) as the master fader in a DAW, and
+ * the AudioDevice (adev) as the speakers. The gain is the same as the literal
+ * fader. Soon i will set up multiple channels, for the sound system, and they
+ * will need to generate samples, and can be thought of as 4 faders. They will
+ * send their signal to the master fader, which sends them to the speakers.
  */
 Sound *init_audio(void)
 {
     Sound *sound = calloc(1, sizeof(Sound));
-    sound->volume = 0.5f;
+    sound->gain = 0.5f;
     sound->dir = FORWARD;
-    sound->step = 1;
+    sound->step = AUDIO_DB_STEP;
     sound->num_channels = 2;
+    sound->volume_dB = amplitude_to_dB(sound->gain);
 
     /* Describe the wanted components, rest of the fields is 0, mfr is only appl
      * so it can stay 0
      * Finds the next (default) component and created a new instance of it */
     AudioComponentDescription acd = {
         .componentType = AU_TYPE_OUTPUT,
+        // Give me an output unit already wired to the default device
         .componentSubType = AU_SUBTYPE_DEFAULT_OUTPUT
     };
     AudioComponent output_component = AudioComponentFindNext(NULL, &acd);
@@ -104,7 +137,7 @@ Sound *init_audio(void)
      * 0 is the main bus/default, then a pointer to the data we are setting,
      * with the size to said data. */
     AudioUnitSetProperty(sound->unit, AU_PROP_STREAM_FORMAT, AU_SCOPE_INPUT,
-            0, &audio_descriptor, sizeof(audio_descriptor));
+                            0, &audio_descriptor, sizeof(audio_descriptor));
 
     /* Hooks in the callback function we defined, with the data we want played
      * After that initializing the component. Ready to set the property on the
@@ -113,11 +146,38 @@ Sound *init_audio(void)
         .inputProc = sound_callback,
         .inputProcRefCon = sound,
     };
-    AudioUnitSetProperty(sound->unit, AU_PROP_SET_RENDER_CALLBACK, AU_SCOPE_INPUT,
+    AudioUnitSetProperty(sound->unit, AU_PROP_SET_RENDER_CB, AU_SCOPE_INPUT,
                             0, &render_callback, sizeof(render_callback));
 
     AudioUnitInitialize(sound->unit);
     AudioOutputUnitStart(sound->unit);
+
+    AudioDeviceID device;
+    uint32_t size = sizeof(device);
+
+    AudioObjectPropertyAddress dev_addr = {
+        .mSelector = AH_PROP_DEFAULT_OUTPUT,
+        .mScope    = AO_PROP_SCOPE_GLOBAL,
+        .mElement  = AO_PROP_ELEMENT_MAIN
+    };
+
+    AudioObjectGetPropertyData(AO_SYSTEM_OBJ, &dev_addr, 0, NULL, &size, &device);
+
+    float volume = 0.0f;
+    AudioObjectPropertyAddress vol = {
+        .mSelector = AD_PROP_VOLUME_SCALAR,
+        .mScope    = AO_PROP_SCOPE_OUTPUT,
+        .mElement  = AO_PROP_ELEMENT_MAIN
+    };
+    AudioObjectGetPropertyData(device, &vol, 0, NULL, &size, &volume);
+    printf("system volume: %f\n", volume);
+
+    //======
+    AudioObjectShow(device);
+    AudioObjectShow(AO_SYSTEM_OBJ); // system object (1)
+    AudioObjectShow(0x6f); // same as device
+    AudioObjectShow(3); // nothing for testing w
+
     return sound;
 }
 
@@ -169,24 +229,24 @@ void fforward_sound(Sound *sound)
     if (sound->step >= 6) sound->step = 1;
 }
 
-/* Linear steps for now while putting together the engine, it should be based on
- * logarithms by mapping it to a gain curve using decibels. That is the way it
- * works best for our ears, but can figure that out later, and does it belong
- * here or in the callback?
- * So far clamping to 0 and 1, stepping 0.02, which gives smooth stepping, and
- * dealing with decibels later.*/
+/* Volume is thought of in decibels, and steps ±1dB for gain. Conversion happens
+ * in the callback, turning it into amplitude. This makes it more natural for
+ * human ears.*/
 void volume_down(Sound *sound)
 {
-    sound->volume -= 0.02f;
-    if (sound->volume < 0.0f)
-        sound->volume = 0.0f;
+    sound->volume_dB -= AUDIO_DB_STEP;
+    if (sound->volume_dB < AUDIO_MIN_DB)
+        sound->volume_dB = AUDIO_MIN_DB;
+    sound->gain = dB_to_amplitude(sound->volume_dB);
+
 }
 
 void volume_up(Sound *sound)
 {
-    sound->volume += 0.02f;
-    if (sound->volume > 1.0f)
-        sound->volume = 1.0f;
+    sound->volume_dB += AUDIO_DB_STEP;
+    if (sound->volume_dB > AUDIO_MAX_DB)
+        sound->volume_dB = AUDIO_MAX_DB;
+    sound->gain = dB_to_amplitude(sound->volume_dB);
 }
 
 

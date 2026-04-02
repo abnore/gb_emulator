@@ -17,13 +17,17 @@
  * will retrieve and play, for now its enough to play a single stream of samples
  * */
 #include <stdint.h>
+#include <stdbool.h>
 #include <AudioToolbox/AudioToolbox.h>
 
 /* Simple PCM format for the test in emulator.c this may have to change later */
-#define AUDIO_SAMPLE_RATE 48000
+#define AUDIO_SAMPLE_RATE 44100
 #define AUDIO_FREQ        330
 #define AUDIO_SECONDS     2
 #define AUDIO_AMPLITUDE   3000
+#define AUDIO_MAX_DB      0
+#define AUDIO_MIN_DB      -96
+#define AUDIO_DB_STEP     1
 
 /* CoreAudioBaseTypes.h
 
@@ -39,25 +43,10 @@ typedef struct {
 }AudioBufferList;
 */
 
-/* An AudioComponent is a void*
- * */
-
-/* AudioComponent.h
-#pragma pack(push, 4)
-typedef struct AudioComponentDescription {
-    OSType              componentType;
-    OSType              componentSubType;
-    OSType              componentManufacturer;
-    UInt32              componentFlags;
-    UInt32              componentFlagsMask;
-} AudioComponentDescription;
-#pragma pack(pop)
-*/
-
 typedef struct {
     /* 'AudioComponentInstance  _Nullable * _Nonnull'
      * (aka 'struct ComponentInstanceRecord **'
-     * An opaque pointer into apples worls, aka like my window
+     * An opaque pointer into apples world, aka like my window
      * AudioUnit is a synonym of that */
     AudioUnit   unit;
     uint8_t *   buffer;
@@ -65,10 +54,11 @@ typedef struct {
     uint32_t    samples_amount;
     uint32_t    step;
     int32_t     read_pos;
-    float       volume;
+    float       volume_dB;
+    float       gain;
     uint8_t     num_channels;
     int8_t      dir;
-    uint8_t     playing;
+    bool        playing;
 } Sound;
 
 enum {
@@ -130,11 +120,53 @@ void make_test_tone(Sound *sound);
 
 /* Property - AudioUnitProperties.h */
 #define AU_PROP_STREAM_FORMAT       8
-#define AU_PROP_SET_RENDER_CALLBACK 23
+#define AU_PROP_SET_RENDER_CB       23
 
 /* Scope - AudioUnitProperties.h */
 #define AU_SCOPE_GLOBAL             0
 #define AU_SCOPE_INPUT              1
 #define AU_SCOPE_OUTPUT             2
+
+/*
+ * AO - Audio Object
+ *
+ * This an HAL refering to the system audio, which we have one of. This is the
+ * real hardware
+ */
+/* Hardware Base types - AudioHardwareBase.h */
+#define AO_CLASS_ID                 'aobj'
+
+#define AO_PROP_SCOPE_GLOBAL        'glob'
+#define AO_PROP_SCOPE_INPUT         'inpt'
+#define AO_PROP_SCOPE_OUTPUT        'outp'
+#define AO_PROP_SCOPE_PLAYTHRU      'ptru'
+#define AO_PROP_ELEMENT_MAIN        0
+
+ /* Hardware - AudioHardware.h*/
+#define AO_SYSTEM_OBJ               1
+#define AO_UNKNOWN_OBJ              0 // No object will have an ID of 0
+
+/* Property selectors*/
+#define AO_PROP_CREATOR             'oplg'
+#define AO_PROP_LISTENER_ADDED      'lisa'
+#define AO_PROP_LISTENES_REMOVED    'lisr'
+
+/* AH - Audio Hardware
+ *
+ * Subclass of AudioObjects
+ * Hardware Property */
+#define AH_PROP_DEVICES             'dev#'
+#define AH_PROP_DEFAULT_INPUT       'dIn '
+#define AH_PROP_DEFAULT_OUTPUT      'dOut'
+
+/* Audio Object Property Selector */
+#define AD_PROP_JACK_IS_CONNECTED   'jack'
+#define AD_PROP_VOLUME_SCALAR       'volm'
+#define AD_PROP_VOLUME_DB           'vold'
+#define AD_PROP_VOLUME_RANGE_DB     'vdb#'
+#define AD_PROP_VOLUME_SCAL_TO_DB   'v2db'
+#define AD_PROP_VOLUME_DB_TO_SCAL   'db2v'
+#define AD_PROP_STEREO_PAN          'span'
+#define AD_PROP_STEREO_PAN_CHANNELS 'spn#'
 
 #endif // SOUND_H
